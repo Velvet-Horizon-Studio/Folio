@@ -1,5 +1,3 @@
-![Folio](https://github.com/Velvet-Horizon-Studio/Folio/blob/main/Folio.png?raw=true)
-
 FOLIO  v.1.0.0
 Your images, beautifully kept.
 
