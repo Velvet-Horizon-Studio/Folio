@@ -146,5 +146,3 @@ images speak for themselves.
 
   Velvet Horizon Studio
   https://github.com/Velvet-Horizon-Studio
-
-================================================================================
