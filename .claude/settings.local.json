@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(ping -n 6 127.0.0.1)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "PowerShell(python --version)",
+      "PowerShell(pip show pillow 2>&1)",
+      "Bash(Get-ChildItem -Path \"H:\\\\Programas\\\\SlideShow Viewer\\\\src\\\\renderer\\\\src\" -Recurse)",
+      "mcp__Windows-MCP__FileSystem"
+    ]
+  }
+}

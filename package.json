@@ -1,0 +1,40 @@
+{
+  "name": "Folio",
+  "version": "1.0.0",
+  "description": "Multi-folder Folio",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "package": "npm run build && electron-builder --win portable"
+  },
+  "dependencies": {
+    "@electron-toolkit/preload": "^3.0.1",
+    "@electron-toolkit/utils": "^3.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "electron": "^31.0.0",
+    "electron-builder": "^25.0.0",
+    "electron-vite": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^5.3.1"
+  },
+  "build": {
+    "appId": "com.Folio",
+    "productName": "Folio",
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*"
+    ],
+    "win": {
+      "target": "portable",
+      "icon": "build/icon.ico",
+      "artifactName": "Folio-portable.exe"
+    }
+  }
+}

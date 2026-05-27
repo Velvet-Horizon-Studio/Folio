@@ -1,0 +1,163 @@
+.folder-manager {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 14px 12px;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.fm-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fm-badge {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.fm-folder-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fm-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 8px 4px;
+}
+
+.fm-folder-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  transition: border-color 0.15s, opacity 0.15s;
+}
+
+.fm-folder-item:hover {
+  border-color: #444;
+}
+
+.fm-folder-inactive {
+  opacity: 0.45;
+}
+
+/* ── Custom checkbox ── */
+.fm-checkbox-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.fm-checkbox-wrap input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.fm-checkmark {
+  display: block;
+  width: 15px;
+  height: 15px;
+  border-radius: 3px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  transition: background 0.15s, border-color 0.15s;
+  position: relative;
+}
+
+.fm-checkbox-wrap input:checked + .fm-checkmark {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.fm-checkbox-wrap input:checked + .fm-checkmark::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: 2px solid #fff;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+
+.fm-checkbox-wrap:hover .fm-checkmark {
+  border-color: var(--accent);
+}
+
+.fm-folder-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.fm-folder-name {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fm-remove-btn {
+  flex-shrink: 0;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 2px 5px;
+  font-size: 11px;
+  border-radius: var(--radius-sm);
+}
+
+.fm-remove-btn:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+.fm-loading {
+  font-size: 11px;
+  color: var(--accent);
+  text-align: center;
+  padding: 4px 0;
+}
+
+.fm-add-btn {
+  background: var(--accent);
+  color: #fff;
+  padding: 9px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  width: 100%;
+  text-align: center;
+}
+
+.fm-add-btn:hover {
+  background: var(--accent-hover);
+}
