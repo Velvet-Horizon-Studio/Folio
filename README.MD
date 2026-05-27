@@ -1,7 +1,7 @@
-![Folio](https://github.com/Velvet-Horizon-Studio/Folio/blob/main/Folio.png?raw=true)
-
 FOLIO  v.1.0.0
 Your images, beautifully kept.
+
+![Folio](https://github.com/Velvet-Horizon-Studio/Folio/blob/main/Folio.png?raw=true)
 
 Folio is a lightweight Windows desktop application built for people who work
 with large image collections. Whether you are curating AI-generated artwork,
