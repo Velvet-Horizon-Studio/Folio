@@ -276,6 +276,19 @@ export function registerIpcHandlers(win) {
     return { success, failed }
   })
 
+  ipcMain.handle('move-image', async (_event, { sourcePath, targetFolder }) => {
+    const name = basename(sourcePath)
+    const destPath = join(targetFolder, name)
+    if (sourcePath === destPath) return sourcePath
+    renameSync(sourcePath, destPath)
+    if (thumbnailCache.has(sourcePath)) {
+      thumbnailCache.set(destPath, thumbnailCache.get(sourcePath))
+      thumbnailCache.delete(sourcePath)
+    }
+    renameThumbOnDisk(sourcePath, destPath)
+    return destPath
+  })
+
   ipcMain.handle('convert-image', async (_event, { sourcePath, format }) => {
     const ext = format === 'jpeg' ? 'jpg' : format
     const stem = basename(sourcePath).replace(/\.[^.]+$/, '')

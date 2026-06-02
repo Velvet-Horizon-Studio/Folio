@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getImageMetadata: (filePath) => ipcRenderer.invoke('get-image-metadata', filePath),
   convertImage: (sourcePath, format) => ipcRenderer.invoke('convert-image', { sourcePath, format }),
   convertImagesBulk: (paths, format) => ipcRenderer.invoke('convert-images-bulk', { paths, format }),
+  moveImage: (sourcePath, targetFolder) => ipcRenderer.invoke('move-image', { sourcePath, targetFolder }),
   watchFolders: (folders) => ipcRenderer.invoke('watch-folders', folders),
   onImagesUpdated: (callback) => {
     const handler = (_event, images) => callback(images)

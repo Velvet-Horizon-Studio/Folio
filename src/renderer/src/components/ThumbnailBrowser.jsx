@@ -145,10 +145,11 @@ const CONVERT_FORMATS = [
 
 
 
-export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDelete, onRename, thumbSize, onThumbSizeChange }) {
+export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDelete, onRename, onMove, folders, thumbSize, onThumbSizeChange }) {
   const activeRef = useRef(null)
   const menuRef = useRef(null)
   const [contextMenu, setContextMenu] = useState(null)
+  const [moveSubmenuOpen, setMoveSubmenuOpen] = useState(false)
   const [selected, setSelected] = useState(new Set())
   const [converting, setConverting] = useState(false)
   const [metaInfo, setMetaInfo] = useState(null)
@@ -161,7 +162,7 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
 
   // Dismiss context menu on outside click or Escape
   useEffect(() => {
-    if (!contextMenu) return
+    if (!contextMenu) { setMoveSubmenuOpen(false); return }
     function onDown(e) {
       if (menuRef.current && !menuRef.current.contains(e.target)) setContextMenu(null)
     }
@@ -424,6 +425,41 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
               {label}
             </button>
           ))}
+          {folders && folders.length > 1 && (() => {
+            const currentFolder = images.find(img => img.path === contextMenu.path)?.folder
+            const otherFolders = folders.filter(f => f.path !== currentFolder)
+            if (otherFolders.length === 0) return null
+            return (
+              <>
+                <div className="tb-context-divider" />
+                <div
+                  className="tb-context-item tb-context-submenu-trigger"
+                  onMouseEnter={() => setMoveSubmenuOpen(true)}
+                  onMouseLeave={() => setMoveSubmenuOpen(false)}
+                >
+                  Move to folder ▶
+                  {moveSubmenuOpen && (
+                    <div className="tb-context-submenu">
+                      {otherFolders.map(f => (
+                        <button
+                          key={f.path}
+                          className="tb-context-item"
+                          title={f.path}
+                          onClick={async () => {
+                            const path = contextMenu.path
+                            setContextMenu(null)
+                            await onMove(path, f.path)
+                          }}
+                        >
+                          {basename(f.path)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )
+          })()}
         </div>
       )}
     </div>

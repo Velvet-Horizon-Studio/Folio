@@ -190,15 +190,17 @@ export default function App() {
     setCurrentIndex((i) => (i + 1) % images.length)
   }, [images.length])
 
-  // Arrow keys: cycle images
+  // Arrow keys: cycle images; Space: toggle play
   useEffect(() => {
     const handler = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
       if (e.key === 'ArrowLeft') handlePrev()
       else if (e.key === 'ArrowRight') handleNext()
+      else if (e.key === ' ') { e.preventDefault(); handleTogglePlay() }
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [handlePrev, handleNext])
+  }, [handlePrev, handleNext, handleTogglePlay])
 
   const handleToggleFullscreen = useCallback(async () => {
     const next = !isFullscreen
@@ -239,6 +241,17 @@ export default function App() {
   const handleRenameImage = useCallback(async (oldPath, newName) => {
     const newPath = await window.electronAPI.renameImage(oldPath, newName)
     setImages((prev) => prev.map((img) => img.path === oldPath ? { ...img, path: newPath } : img))
+  }, [])
+
+  const handleMoveImage = useCallback(async (sourcePath, targetFolder) => {
+    try {
+      const newPath = await window.electronAPI.moveImage(sourcePath, targetFolder)
+      setImages((prev) => prev.map((img) =>
+        img.path === sourcePath ? { ...img, path: newPath, folder: targetFolder } : img
+      ))
+    } catch (err) {
+      alert(`Could not move file:\n${err?.message || err}`)
+    }
   }, [])
 
   // Sidebar resize drag
@@ -386,6 +399,8 @@ export default function App() {
               onJumpTo={handleJumpTo}
               onDelete={handleDeleteImage}
               onRename={handleRenameImage}
+              onMove={handleMoveImage}
+              folders={folders}
               thumbSize={thumbSize}
               onThumbSizeChange={setThumbSize}
             />
