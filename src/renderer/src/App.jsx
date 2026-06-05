@@ -134,9 +134,12 @@ export default function App() {
         const idx = list.findIndex((img) => norm(img.path) === norm(savedPath))
         setCurrentIndex(idx >= 0 ? idx : 0)
       } else if (behavior === 'last') {
-        // Find the visually-last image (same sort as thumbnail browser),
-        // then locate it in the list (which may be shuffled)
-        const sorted = [...imgs].sort((a, b) => a.folder.localeCompare(b.folder) || a.path.localeCompare(b.path))
+        // Find the visually-last image respecting folder order, then locate in (possibly shuffled) list
+        const folderOrder = new Map(folders.map((f, i) => [f.path, i]))
+        const sorted = [...imgs].sort(
+          (a, b) => (folderOrder.get(a.folder) ?? 999) - (folderOrder.get(b.folder) ?? 999)
+                 || a.path.localeCompare(b.path)
+        )
         const lastPath = sorted[sorted.length - 1]?.path
         const idx = lastPath ? list.findIndex((img) => img.path === lastPath) : list.length - 1
         setCurrentIndex(idx >= 0 ? idx : list.length - 1)
@@ -193,6 +196,38 @@ export default function App() {
     setFolders((f) =>
       f.map((item) => item.path === path ? { ...item, active: !item.active } : item)
     )
+  }, [])
+
+  const handleMoveFolderContents = useCallback(async (sourceFolderPath, targetFolderPath) => {
+    const paths = images
+      .filter(img => img.folder === sourceFolderPath)
+      .map(img => img.path)
+    if (paths.length === 0) return
+    try {
+      const results = await window.electronAPI.moveImagesBulk(paths, targetFolderPath)
+      const moved = results.filter(r => r.ok)
+      const failed = results.filter(r => !r.ok)
+      if (moved.length > 0) {
+        const map = new Map(moved.map(r => [r.sourcePath, r.destPath]))
+        setImages(prev => prev.map(img => {
+          const newPath = map.get(img.path)
+          return newPath ? { ...img, path: newPath, folder: targetFolderPath } : img
+        }))
+      }
+      if (failed.length > 0) alert(`${failed.length} file(s) could not be moved.`)
+    } catch (err) {
+      alert(`Move failed:\n${err?.message || err}`)
+    }
+  }, [images])
+
+  const handleReorderFolders = useCallback((fromIndex, toIndex) => {
+    if (fromIndex === toIndex) return
+    setFolders((prev) => {
+      const next = [...prev]
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
+      return next
+    })
   }, [])
 
   const handleTogglePlay = useCallback(() => {
@@ -321,22 +356,26 @@ export default function App() {
   }, [isFullscreen])
 
   const handleDragEnter = useCallback((e) => {
+    if (e.dataTransfer.types.includes('application/x-folio-reorder')) return
     e.preventDefault()
     dragCounterRef.current++
     if (dragCounterRef.current === 1) setIsDragging(true)
   }, [])
 
   const handleDragLeave = useCallback((e) => {
+    if (e.dataTransfer.types.includes('application/x-folio-reorder')) return
     e.preventDefault()
     dragCounterRef.current--
     if (dragCounterRef.current === 0) setIsDragging(false)
   }, [])
 
   const handleDragOver = useCallback((e) => {
+    if (e.dataTransfer.types.includes('application/x-folio-reorder')) return
     e.preventDefault()
   }, [])
 
   const handleDrop = useCallback((e) => {
+    if (e.dataTransfer.types.includes('application/x-folio-reorder')) return
     e.preventDefault()
     dragCounterRef.current = 0
     setIsDragging(false)
@@ -416,6 +455,8 @@ export default function App() {
               onAdd={handleAddFolder}
               onRemove={handleRemoveFolder}
               onToggle={handleToggleFolder}
+              onReorder={handleReorderFolders}
+              onMoveFolder={handleMoveFolderContents}
               imageCount={images.length}
               loading={loading}
               startupBehavior={startupBehavior}

@@ -6,6 +6,10 @@ All notable changes to Folio are documented here.
 
 ## [1.1.1] — 2026-06-05
 
+### Added
+- **Drag to reorder folders** — drag the ⠿ handle on any folder row in the sidebar to change its position; the thumbnail groups in the Browse tab follow the same order.
+- **Move folder contents** — right-click any folder in the sidebar and choose "Move all to ▶" to move every image inside it to another loaded folder in one operation.
+
 ### Fixed
 - **Bulk move to folder** — Ctrl-click to select multiple thumbnails, then use the "📁 Move to…" button in the bulk action bar to move them all to another folder in one operation.
 - **Resume last image** — config was saving `lastImagePath: null` before the async scan finished on startup, wiping the saved position every launch.

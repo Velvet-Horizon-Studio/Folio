@@ -162,6 +162,32 @@
   background: var(--accent-hover);
 }
 
+/* ── Drag to reorder ── */
+.fm-drag-handle {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  cursor: grab;
+  padding: 0 2px;
+  opacity: 0.35;
+  transition: opacity 0.15s;
+  user-select: none;
+  font-size: 14px;
+}
+
+.fm-folder-item:hover .fm-drag-handle {
+  opacity: 0.9;
+}
+
+.fm-folder-dragging {
+  opacity: 0.35;
+  border-style: dashed;
+}
+
+.fm-folder-drag-over {
+  border-color: var(--accent);
+  background: rgba(99, 102, 241, 0.12);
+}
+
 .fm-settings {
   padding: 12px 14px 8px;
   border-top: 1px solid var(--border);
@@ -192,4 +218,66 @@
 
 .fm-setting-opt-active {
   color: var(--text);
+}
+
+/* ── Folder context menu ── */
+.fm-context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 170px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 4px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+}
+
+.fm-context-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 4px 10px 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.fm-context-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.fm-context-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.fm-context-item:hover {
+  background: var(--bg-hover);
+}
+
+.fm-context-submenu-trigger {
+  position: relative;
+}
+
+.fm-context-submenu {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  min-width: 170px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 4px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+  z-index: 1001;
 }

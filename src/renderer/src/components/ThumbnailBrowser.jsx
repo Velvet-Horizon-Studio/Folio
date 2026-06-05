@@ -268,9 +268,13 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
     }
   }
 
+  const folderOrder = new Map((folders ?? []).map((f, i) => [f.path, i]))
   const sorted = [...images]
     .map((img, i) => ({ ...img, globalIndex: i }))
-    .sort((a, b) => a.folder.localeCompare(b.folder) || a.path.localeCompare(b.path))
+    .sort((a, b) =>
+      (folderOrder.get(a.folder) ?? 999) - (folderOrder.get(b.folder) ?? 999)
+      || a.path.localeCompare(b.path)
+    )
 
   const groups = new Map()
   for (const img of sorted) {
