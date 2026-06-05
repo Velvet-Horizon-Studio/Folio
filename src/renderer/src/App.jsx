@@ -76,11 +76,14 @@ export default function App() {
   // Persist settings whenever they change (after initial load)
   useEffect(() => {
     if (!configReady.current) return
-    window.electronAPI.saveConfig({
+    const payload = {
       folders, intervalMs, shuffled, transition, transitionDuration,
       sidebarTab, sidebarWidth, thumbSize, startupBehavior,
-      lastImagePath: images[currentIndex]?.path ?? null,
-    })
+    }
+    // Only overwrite lastImagePath once images are loaded so we don't
+    // clobber the saved path during the async scan on startup
+    if (images.length > 0) payload.lastImagePath = images[currentIndex]?.path ?? null
+    window.electronAPI.saveConfig(payload)
   }, [folders, intervalMs, shuffled, transition, transitionDuration,
       sidebarTab, sidebarWidth, thumbSize, startupBehavior, currentIndex, images])
 
