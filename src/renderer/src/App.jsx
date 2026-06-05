@@ -31,7 +31,8 @@ export default function App() {
   const [sidebarTab, setSidebarTab] = useState('folders')
   const [sidebarWidth, setSidebarWidth] = useState(260)
   const [thumbSize, setThumbSize] = useState(80)
-  const [startupBehavior, setStartupBehavior] = useState('last')
+  const [startupBehavior, setStartupBehavior] = useState('resume')
+  const startupBehaviorRef = useRef('resume')
   const sidebarResizing = useRef(false)
   const timerRef = useRef(null)
   const configReady = useRef(false)
@@ -60,7 +61,12 @@ export default function App() {
         if (typeof cfg.sidebarTab === 'string')         setSidebarTab(cfg.sidebarTab)
         if (typeof cfg.sidebarWidth === 'number')       setSidebarWidth(cfg.sidebarWidth)
         if (typeof cfg.thumbSize === 'number')          setThumbSize(cfg.thumbSize)
-        if (typeof cfg.startupBehavior === 'string')    setStartupBehavior(cfg.startupBehavior)
+        if (typeof cfg.startupBehavior === 'string') {
+          // migrate old value name
+          const val = cfg.startupBehavior === 'last' ? 'resume' : cfg.startupBehavior
+          setStartupBehavior(val)
+          startupBehaviorRef.current = val
+        }
         if (typeof cfg.lastImagePath === 'string')      lastImagePathRef.current = cfg.lastImagePath
       }
       configReady.current = true
@@ -80,6 +86,7 @@ export default function App() {
 
   useEffect(() => { imagesRef.current = images }, [images])
   useEffect(() => { currentIndexRef.current = currentIndex }, [currentIndex])
+  useEffect(() => { startupBehaviorRef.current = startupBehavior }, [startupBehavior])
 
   // Sync fullscreen state from main process
   useEffect(() => {
@@ -118,17 +125,21 @@ export default function App() {
     window.electronAPI.scanImages(activePaths).then((imgs) => {
       const list = shuffled ? shuffle(imgs) : imgs
       setImages(list)
-      // Restore last-viewed image or start from first, depending on setting
-      if (startupBehavior === 'last' && lastImagePathRef.current) {
-        const idx = list.findIndex((img) => img.path === lastImagePathRef.current)
+      const behavior = startupBehaviorRef.current
+      const savedPath = lastImagePathRef.current
+      lastImagePathRef.current = null
+      if (behavior === 'resume' && savedPath) {
+        const norm = (p) => p.replace(/\\/g, '/').toLowerCase()
+        const idx = list.findIndex((img) => norm(img.path) === norm(savedPath))
         setCurrentIndex(idx >= 0 ? idx : 0)
+      } else if (behavior === 'last') {
+        setCurrentIndex(Math.max(0, list.length - 1))
       } else {
         setCurrentIndex(0)
       }
-      lastImagePathRef.current = null
       setLoading(false)
     })
-  }, [folders, shuffled, startupBehavior])
+  }, [folders, shuffled])
 
   // Listen for file-system changes detected by folder watchers
   useEffect(() => {

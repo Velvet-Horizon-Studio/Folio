@@ -51,25 +51,26 @@ export default function FolderManager({ folders, onAdd, onRemove, onToggle, imag
       <div className="fm-settings">
         <div className="fm-section-title" style={{ marginTop: 0 }}>Startup</div>
         <div className="fm-setting-row">
-          <label className={`fm-setting-opt${startupBehavior === 'last' ? ' fm-setting-opt-active' : ''}`}>
-            <input
-              type="radio"
-              name="startupBehavior"
-              value="last"
-              checked={startupBehavior === 'last'}
-              onChange={() => onStartupBehaviorChange('last')}
+          <label className={`fm-setting-opt${startupBehavior === 'resume' ? ' fm-setting-opt-active' : ''}`}>
+            <input type="radio" name="startupBehavior" value="resume"
+              checked={startupBehavior === 'resume'}
+              onChange={() => onStartupBehaviorChange('resume')}
             />
             Resume last image
           </label>
           <label className={`fm-setting-opt${startupBehavior === 'first' ? ' fm-setting-opt-active' : ''}`}>
-            <input
-              type="radio"
-              name="startupBehavior"
-              value="first"
+            <input type="radio" name="startupBehavior" value="first"
               checked={startupBehavior === 'first'}
               onChange={() => onStartupBehaviorChange('first')}
             />
-            Always start from first
+            Start from first image
+          </label>
+          <label className={`fm-setting-opt${startupBehavior === 'last' ? ' fm-setting-opt-active' : ''}`}>
+            <input type="radio" name="startupBehavior" value="last"
+              checked={startupBehavior === 'last'}
+              onChange={() => onStartupBehaviorChange('last')}
+            />
+            Start from last image
           </label>
         </div>
       </div>
