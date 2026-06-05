@@ -62,10 +62,8 @@ export default function App() {
         if (typeof cfg.sidebarWidth === 'number')       setSidebarWidth(cfg.sidebarWidth)
         if (typeof cfg.thumbSize === 'number')          setThumbSize(cfg.thumbSize)
         if (typeof cfg.startupBehavior === 'string') {
-          // migrate old value name
-          const val = cfg.startupBehavior === 'last' ? 'resume' : cfg.startupBehavior
-          setStartupBehavior(val)
-          startupBehaviorRef.current = val
+          setStartupBehavior(cfg.startupBehavior)
+          startupBehaviorRef.current = cfg.startupBehavior
         }
         if (typeof cfg.lastImagePath === 'string')      lastImagePathRef.current = cfg.lastImagePath
       }
@@ -136,7 +134,12 @@ export default function App() {
         const idx = list.findIndex((img) => norm(img.path) === norm(savedPath))
         setCurrentIndex(idx >= 0 ? idx : 0)
       } else if (behavior === 'last') {
-        setCurrentIndex(Math.max(0, list.length - 1))
+        // Find the visually-last image (same sort as thumbnail browser),
+        // then locate it in the list (which may be shuffled)
+        const sorted = [...imgs].sort((a, b) => a.folder.localeCompare(b.folder) || a.path.localeCompare(b.path))
+        const lastPath = sorted[sorted.length - 1]?.path
+        const idx = lastPath ? list.findIndex((img) => img.path === lastPath) : list.length - 1
+        setCurrentIndex(idx >= 0 ? idx : list.length - 1)
       } else {
         setCurrentIndex(0)
       }
@@ -388,7 +391,7 @@ export default function App() {
             <div className="app-brand">
               <div className="app-name-row">
                 <span className="app-title">Folio</span>
-                <span className="app-version">v.1.1.0</span>
+                <span className="app-version">v.1.1.1</span>
               </div>
               <div className="app-tagline">Your images, beautifully kept.</div>
             </div>

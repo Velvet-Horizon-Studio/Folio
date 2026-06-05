@@ -1,6 +1,6 @@
 {
   "name": "Folio",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Multi-folder Folio",
   "main": "./out/main/index.js",
   "scripts": {
@@ -34,7 +34,7 @@
     "win": {
       "target": "portable",
       "icon": "build/icon.ico",
-      "artifactName": "Folio-portable.exe"
+      "artifactName": "${productName}_${version}_Portable.exe"
     }
   }
 }

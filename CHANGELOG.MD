@@ -4,11 +4,20 @@ All notable changes to Folio are documented here.
 
 ---
 
+## [1.1.1] — 2026-06-05
+
+### Fixed
+- **Bulk move to folder** — Ctrl-click to select multiple thumbnails, then use the "📁 Move to…" button in the bulk action bar to move them all to another folder in one operation.
+- **Resume last image** — config was saving `lastImagePath: null` before the async scan finished on startup, wiping the saved position every launch.
+- **Start from last image** — was picking a random position when shuffle was enabled; now always resolves to the visually-last image in the sorted thumbnail order.
+- **Startup behavior setting** — changing the option no longer triggers a full image rescan.
+
+---
+
 ## [1.1.0] — 2026-06-02
 
 ### Added
 - **Move to folder** — right-click any thumbnail to move the image to another loaded folder. The submenu lists every other active folder by name; the image list updates instantly without a restart.
-- **Bulk move to folder** — Ctrl-click to select multiple thumbnails, then use the "📁 Move to…" button in the bulk action bar to move them all to another folder in one operation.
 - **Spacebar play/pause** — press Space anywhere in the app to start or stop the slideshow. The shortcut is ignored when a text input (e.g. the rename field) is focused.
 
 ---
