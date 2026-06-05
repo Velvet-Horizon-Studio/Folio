@@ -128,7 +128,7 @@ images speak for themselves.
 
   Installation
   ------------
-  There is no installer. Download Folio_1.1.1_Portable.exe, place it anywhere you
+  There is no installer. Download Folio_x.x.x_Portable.exe, place it anywhere you
   like — your Desktop, a folder, or a USB drive — and double-click to run.
   Folio writes its settings and thumbnail cache to your user data folder and
   leaves the rest of your system untouched.
