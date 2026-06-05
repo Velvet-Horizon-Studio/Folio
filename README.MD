@@ -16,7 +16,7 @@ images speak for themselves.
   FEATURES
 --------------------------------------------------------------------------------
 
-  SLIDESHOW VIEWER
+   SLIDESHOW VIEWER
   ----------------
   Load images from one or more folders and let Folio run them as a continuous
   slideshow. Choose from multiple transition effects (fade, slide, zoom) and
@@ -89,9 +89,22 @@ images speak for themselves.
                  multiple images and use the bulk action bar to convert them
                  all in place with no dialog.
 
+    Move         Right-click any thumbnail and choose Move to folder to send
+                 it to another loaded folder. Select multiple thumbnails and
+                 use the Move to… button in the bulk action bar to move them
+                 all at once.
+
     Copy file    Right-click any thumbnail and choose Copy file to place it
                  on the Windows clipboard exactly like Ctrl+C in Explorer.
                  Navigate to any folder and paste with Ctrl+V.
+
+  FOLDER MANAGEMENT
+  -----------------
+  Drag the ⠿ handle on any folder row in the sidebar to reorder it. The
+  thumbnail groups in the Browse tab follow the same order automatically.
+
+  Right-click any folder and choose Move all to to move every image inside
+  it to another loaded folder in a single operation.
 
   PERSISTENT SETTINGS
   -------------------
@@ -99,6 +112,10 @@ images speak for themselves.
   reopen it: the folders you had loaded, which image you were viewing, the
   sidebar width, and the thumbnail size. You pick up exactly where you left off
   every single time.
+
+  Choose your preferred startup mode: resume the last image you were viewing,
+  always start from the first image, or jump to the last image in the
+  collection.
 
 
 --------------------------------------------------------------------------------
@@ -111,7 +128,7 @@ images speak for themselves.
 
   Installation
   ------------
-  There is no installer. Download Folio-portable.exe, place it anywhere you
+  There is no installer. Download Folio_1.1.1_Portable.exe, place it anywhere you
   like — your Desktop, a folder, or a USB drive — and double-click to run.
   Folio writes its settings and thumbnail cache to your user data folder and
   leaves the rest of your system untouched.
