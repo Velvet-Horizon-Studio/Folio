@@ -325,7 +325,7 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
           >
             → JPEG
           </button>
-          {folders && folders.filter(f => f.active).length > 1 && (
+          {folders && folders.length > 0 && (
             <div className="tb-bulk-move-wrap" ref={bulkMoveRef}>
               <button
                 className="tb-bulk-btn"
