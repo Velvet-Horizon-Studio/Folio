@@ -4,7 +4,7 @@ function basename(path) {
   return path.replace(/\\/g, '/').split('/').pop() || path
 }
 
-export default function FolderManager({ folders, onAdd, onRemove, onToggle, imageCount, loading }) {
+export default function FolderManager({ folders, onAdd, onRemove, onToggle, imageCount, loading, startupBehavior, onStartupBehaviorChange }) {
   return (
     <div className="folder-manager">
       <div className="fm-section-title">
@@ -47,6 +47,32 @@ export default function FolderManager({ folders, onAdd, onRemove, onToggle, imag
       <button className="fm-add-btn" onClick={onAdd}>
         + Add Folder
       </button>
+
+      <div className="fm-settings">
+        <div className="fm-section-title" style={{ marginTop: 0 }}>Startup</div>
+        <div className="fm-setting-row">
+          <label className={`fm-setting-opt${startupBehavior === 'last' ? ' fm-setting-opt-active' : ''}`}>
+            <input
+              type="radio"
+              name="startupBehavior"
+              value="last"
+              checked={startupBehavior === 'last'}
+              onChange={() => onStartupBehaviorChange('last')}
+            />
+            Resume last image
+          </label>
+          <label className={`fm-setting-opt${startupBehavior === 'first' ? ' fm-setting-opt-active' : ''}`}>
+            <input
+              type="radio"
+              name="startupBehavior"
+              value="first"
+              checked={startupBehavior === 'first'}
+              onChange={() => onStartupBehaviorChange('first')}
+            />
+            Always start from first
+          </label>
+        </div>
+      </div>
     </div>
   )
 }

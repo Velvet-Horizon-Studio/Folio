@@ -31,6 +31,7 @@ export default function App() {
   const [sidebarTab, setSidebarTab] = useState('folders')
   const [sidebarWidth, setSidebarWidth] = useState(260)
   const [thumbSize, setThumbSize] = useState(80)
+  const [startupBehavior, setStartupBehavior] = useState('last')
   const sidebarResizing = useRef(false)
   const timerRef = useRef(null)
   const configReady = useRef(false)
@@ -59,6 +60,7 @@ export default function App() {
         if (typeof cfg.sidebarTab === 'string')         setSidebarTab(cfg.sidebarTab)
         if (typeof cfg.sidebarWidth === 'number')       setSidebarWidth(cfg.sidebarWidth)
         if (typeof cfg.thumbSize === 'number')          setThumbSize(cfg.thumbSize)
+        if (typeof cfg.startupBehavior === 'string')    setStartupBehavior(cfg.startupBehavior)
         if (typeof cfg.lastImagePath === 'string')      lastImagePathRef.current = cfg.lastImagePath
       }
       configReady.current = true
@@ -70,11 +72,11 @@ export default function App() {
     if (!configReady.current) return
     window.electronAPI.saveConfig({
       folders, intervalMs, shuffled, transition, transitionDuration,
-      sidebarTab, sidebarWidth, thumbSize,
+      sidebarTab, sidebarWidth, thumbSize, startupBehavior,
       lastImagePath: images[currentIndex]?.path ?? null,
     })
   }, [folders, intervalMs, shuffled, transition, transitionDuration,
-      sidebarTab, sidebarWidth, thumbSize, currentIndex, images])
+      sidebarTab, sidebarWidth, thumbSize, startupBehavior, currentIndex, images])
 
   useEffect(() => { imagesRef.current = images }, [images])
   useEffect(() => { currentIndexRef.current = currentIndex }, [currentIndex])
@@ -116,17 +118,17 @@ export default function App() {
     window.electronAPI.scanImages(activePaths).then((imgs) => {
       const list = shuffled ? shuffle(imgs) : imgs
       setImages(list)
-      // Restore last-viewed image on first load; otherwise reset to 0
-      if (lastImagePathRef.current) {
+      // Restore last-viewed image or start from first, depending on setting
+      if (startupBehavior === 'last' && lastImagePathRef.current) {
         const idx = list.findIndex((img) => img.path === lastImagePathRef.current)
         setCurrentIndex(idx >= 0 ? idx : 0)
-        lastImagePathRef.current = null
       } else {
         setCurrentIndex(0)
       }
+      lastImagePathRef.current = null
       setLoading(false)
     })
-  }, [folders, shuffled])
+  }, [folders, shuffled, startupBehavior])
 
   // Listen for file-system changes detected by folder watchers
   useEffect(() => {
@@ -399,6 +401,8 @@ export default function App() {
               onToggle={handleToggleFolder}
               imageCount={images.length}
               loading={loading}
+              startupBehavior={startupBehavior}
+              onStartupBehaviorChange={setStartupBehavior}
             />
           ) : (
             <ThumbnailBrowser

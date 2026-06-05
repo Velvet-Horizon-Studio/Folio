@@ -161,3 +161,35 @@
 .fm-add-btn:hover {
   background: var(--accent-hover);
 }
+
+.fm-settings {
+  padding: 12px 14px 8px;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+
+.fm-setting-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.fm-setting-opt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 3px 0;
+}
+
+.fm-setting-opt input[type="radio"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.fm-setting-opt-active {
+  color: var(--text);
+}
