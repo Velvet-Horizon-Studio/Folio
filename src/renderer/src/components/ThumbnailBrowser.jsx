@@ -334,28 +334,32 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
               >
                 📁 Move to…
               </button>
-              {bulkMoveOpen && (
-                <div className="tb-bulk-move-menu">
-                  {folders.filter(f => f.active).map(f => {
-                    // derive which folders the selected images currently live in
-                    const selectedFolders = new Set(
-                      [...selected].map(p => images.find(img => img.path === p)?.folder)
-                    )
-                    // only show folders that aren't the sole source folder
-                    if (selectedFolders.size === 1 && selectedFolders.has(f.path)) return null
-                    return (
-                      <button
-                        key={f.path}
-                        className="tb-bulk-move-item"
-                        title={f.path}
-                        onClick={() => handleBulkMove(f.path)}
-                      >
-                        {basename(f.path)}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
+              {bulkMoveOpen && (() => {
+                const activeFolders = folders.filter(f => f.active)
+                const sourceFolders = new Set(
+                  [...selected].map(p => images.find(img => img.path === p)?.folder).filter(Boolean)
+                )
+                const targets = activeFolders.filter(
+                  f => !(sourceFolders.size === 1 && sourceFolders.has(f.path))
+                )
+                return (
+                  <div className="tb-bulk-move-menu">
+                    {targets.length === 0
+                      ? <span className="tb-bulk-move-item" style={{ color: 'var(--text-muted)', cursor: 'default' }}>No other folders</span>
+                      : targets.map(f => (
+                          <button
+                            key={f.path}
+                            className="tb-bulk-move-item"
+                            title={f.path}
+                            onClick={() => handleBulkMove(f.path)}
+                          >
+                            {basename(f.path)}
+                          </button>
+                        ))
+                    }
+                  </div>
+                )
+              })()}
             </div>
           )}
           <button
