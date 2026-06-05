@@ -150,6 +150,8 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
   const menuRef = useRef(null)
   const [contextMenu, setContextMenu] = useState(null)
   const [moveSubmenuOpen, setMoveSubmenuOpen] = useState(false)
+  const [bulkMoveOpen, setBulkMoveOpen] = useState(false)
+  const bulkMoveRef = useRef(null)
   const [selected, setSelected] = useState(new Set())
   const [converting, setConverting] = useState(false)
   const [metaInfo, setMetaInfo] = useState(null)
@@ -199,6 +201,27 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
       try { await onDelete(path) } catch {}
     }
     setSelected(new Set())
+  }
+
+  // Close bulk-move dropdown on outside click
+  useEffect(() => {
+    if (!bulkMoveOpen) return
+    function onDown(e) {
+      if (bulkMoveRef.current && !bulkMoveRef.current.contains(e.target)) setBulkMoveOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [bulkMoveOpen])
+
+  async function handleBulkMove(targetFolder) {
+    setBulkMoveOpen(false)
+    const paths = [...selected]
+    let failed = 0
+    for (const path of paths) {
+      try { await onMove(path, targetFolder) } catch { failed++ }
+    }
+    setSelected(new Set())
+    if (failed > 0) alert(`${failed} file(s) could not be moved.`)
   }
 
   async function handleBulkConvert(format) {
@@ -302,6 +325,39 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
           >
             → JPEG
           </button>
+          {folders && folders.filter(f => f.active).length > 1 && (
+            <div className="tb-bulk-move-wrap" ref={bulkMoveRef}>
+              <button
+                className="tb-bulk-btn"
+                onClick={() => setBulkMoveOpen(o => !o)}
+                title="Move selected to another folder"
+              >
+                📁 Move to…
+              </button>
+              {bulkMoveOpen && (
+                <div className="tb-bulk-move-menu">
+                  {folders.filter(f => f.active).map(f => {
+                    // derive which folders the selected images currently live in
+                    const selectedFolders = new Set(
+                      [...selected].map(p => images.find(img => img.path === p)?.folder)
+                    )
+                    // only show folders that aren't the sole source folder
+                    if (selectedFolders.size === 1 && selectedFolders.has(f.path)) return null
+                    return (
+                      <button
+                        key={f.path}
+                        className="tb-bulk-move-item"
+                        title={f.path}
+                        onClick={() => handleBulkMove(f.path)}
+                      >
+                        {basename(f.path)}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
           <button
             className="tb-bulk-btn tb-bulk-delete"
             onClick={handleBulkDelete}
