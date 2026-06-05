@@ -276,6 +276,28 @@ export function registerIpcHandlers(win) {
     return { success, failed }
   })
 
+  ipcMain.handle('move-images-bulk', async (_event, { paths, targetFolder }) => {
+    const results = []
+    for (const sourcePath of paths) {
+      const name = basename(sourcePath)
+      const destPath = join(targetFolder, name)
+      try {
+        if (sourcePath !== destPath) {
+          renameSync(sourcePath, destPath)
+          if (thumbnailCache.has(sourcePath)) {
+            thumbnailCache.set(destPath, thumbnailCache.get(sourcePath))
+            thumbnailCache.delete(sourcePath)
+          }
+          renameThumbOnDisk(sourcePath, destPath)
+        }
+        results.push({ sourcePath, destPath, ok: true })
+      } catch (err) {
+        results.push({ sourcePath, destPath, ok: false, error: err.message })
+      }
+    }
+    return results
+  })
+
   ipcMain.handle('move-image', async (_event, { sourcePath, targetFolder }) => {
     const name = basename(sourcePath)
     const destPath = join(targetFolder, name)

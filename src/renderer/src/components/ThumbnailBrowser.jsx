@@ -145,7 +145,7 @@ const CONVERT_FORMATS = [
 
 
 
-export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDelete, onRename, onMove, folders, thumbSize, onThumbSizeChange }) {
+export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDelete, onRename, onMove, onBulkMoved, folders, thumbSize, onThumbSizeChange }) {
   const activeRef = useRef(null)
   const menuRef = useRef(null)
   const [contextMenu, setContextMenu] = useState(null)
@@ -216,12 +216,20 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
   async function handleBulkMove(targetFolder) {
     setBulkMoveOpen(false)
     const paths = [...selected]
-    let failed = 0
-    for (const path of paths) {
-      try { await onMove(path, targetFolder) } catch { failed++ }
+    try {
+      const results = await window.electronAPI.moveImagesBulk(paths, targetFolder)
+      // single state update for all moved files
+      const moved = results.filter(r => r.ok)
+      const failed = results.filter(r => !r.ok)
+      if (moved.length > 0) {
+        const map = new Map(moved.map(r => [r.sourcePath, r.destPath]))
+        onBulkMoved(map, targetFolder)
+      }
+      setSelected(new Set())
+      if (failed.length > 0) alert(`${failed.length} file(s) could not be moved.`)
+    } catch (err) {
+      alert(`Move failed:\n${err?.message || err}`)
     }
-    setSelected(new Set())
-    if (failed > 0) alert(`${failed} file(s) could not be moved.`)
   }
 
   async function handleBulkConvert(format) {

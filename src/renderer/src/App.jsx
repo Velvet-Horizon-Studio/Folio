@@ -254,6 +254,14 @@ export default function App() {
     }
   }, [])
 
+  // Called after a bulk move so we do one single setImages update
+  const handleBulkMoved = useCallback((pathMap, targetFolder) => {
+    setImages((prev) => prev.map((img) => {
+      const newPath = pathMap.get(img.path)
+      return newPath ? { ...img, path: newPath, folder: targetFolder } : img
+    }))
+  }, [])
+
   // Sidebar resize drag
   useEffect(() => {
     function onMouseMove(e) {
@@ -400,6 +408,7 @@ export default function App() {
               onDelete={handleDeleteImage}
               onRename={handleRenameImage}
               onMove={handleMoveImage}
+              onBulkMoved={handleBulkMoved}
               folders={folders}
               thumbSize={thumbSize}
               onThumbSizeChange={setThumbSize}
