@@ -9,8 +9,8 @@
   flex: 1;
 }
 
-/* ── Dual-buffer slots ── */
-.slideshow-slot {
+/* ── Image layers ── */
+.slideshow-layer {
   position: absolute;
   inset: 0;
   display: flex;
@@ -25,272 +25,64 @@
   display: block;
 }
 
-/* ── Fade ── */
-.transition-fade.slot-active {
-  opacity: 1;
-  z-index: 2;
-  transition: opacity var(--transition-duration) ease;
-}
-.transition-fade.slot-enter-start {
-  opacity: 0;
-  z-index: 2;
-  transition: none;
-}
-.transition-fade.slot-leave {
-  opacity: 0;
-  z-index: 1;
-  transition: opacity var(--transition-duration) ease;
-}
-.transition-fade.slot-idle {
-  opacity: 0;
-  z-index: 0;
-  transition: none;
+/* Enter animations. `both` fill-mode holds the 0 % keyframe from the first paint,
+   so the incoming image is never shown at full opacity before it animates in. */
+.layer-enter {
+  animation-duration: var(--transition-duration);
+  animation-timing-function: ease;
+  animation-fill-mode: both;
 }
 
-/* ── Slide Up ── */
-.transition-slide-up.slot-active {
-  opacity: 1;
-  transform: translateY(0);
-  z-index: 2;
-  transition: opacity var(--transition-duration) ease, transform var(--transition-duration) cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-.transition-slide-up.slot-enter-start {
-  opacity: 0;
-  transform: translateY(60px);
-  z-index: 2;
-  transition: none;
-}
-.transition-slide-up.slot-leave {
-  opacity: 0;
-  transform: translateY(-60px);
-  z-index: 1;
-  transition: opacity var(--transition-duration) ease, transform var(--transition-duration) cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-.transition-slide-up.slot-idle {
-  opacity: 0;
-  transform: translateY(0);
-  z-index: 0;
-  transition: none;
-}
+.transition-fade        { animation-name: sl-fade; }
+.transition-slide-up    { animation-name: sl-slide-up;    animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+.transition-slide-down  { animation-name: sl-slide-down;  animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+.transition-slide-left  { animation-name: sl-slide-left;  animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+.transition-slide-right { animation-name: sl-slide-right; animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+.transition-zoom-in     { animation-name: sl-zoom-in;     animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); }
+.transition-zoom-out    { animation-name: sl-zoom-out;    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); }
+.transition-blur        { animation-name: sl-blur; }
+.transition-rotate      { animation-name: sl-rotate;      animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1); }
+.transition-flip        { animation-name: sl-flip;        animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); }
 
-/* ── Slide Down ── */
-.transition-slide-down.slot-active {
-  opacity: 1;
-  transform: translateY(0);
-  z-index: 2;
-  transition: opacity var(--transition-duration) ease, transform var(--transition-duration) cubic-bezier(0.25, 0.46, 0.45, 0.94);
+@keyframes sl-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
-.transition-slide-down.slot-enter-start {
-  opacity: 0;
-  transform: translateY(-60px);
-  z-index: 2;
-  transition: none;
+@keyframes sl-slide-up {
+  from { opacity: 0; transform: translateY(60px); }
+  to   { opacity: 1; transform: none; }
 }
-.transition-slide-down.slot-leave {
-  opacity: 0;
-  transform: translateY(60px);
-  z-index: 1;
-  transition: opacity var(--transition-duration) ease, transform var(--transition-duration) cubic-bezier(0.25, 0.46, 0.45, 0.94);
+@keyframes sl-slide-down {
+  from { opacity: 0; transform: translateY(-60px); }
+  to   { opacity: 1; transform: none; }
 }
-.transition-slide-down.slot-idle {
-  opacity: 0;
-  transform: translateY(0);
-  z-index: 0;
-  transition: none;
+@keyframes sl-slide-left {
+  from { opacity: 0; transform: translateX(60px); }
+  to   { opacity: 1; transform: none; }
 }
-
-/* ── Slide Left ── */
-.transition-slide-left.slot-active {
-  opacity: 1;
-  transform: translateX(0);
-  z-index: 2;
-  transition: opacity var(--transition-duration) ease, transform var(--transition-duration) cubic-bezier(0.25, 0.46, 0.45, 0.94);
+@keyframes sl-slide-right {
+  from { opacity: 0; transform: translateX(-60px); }
+  to   { opacity: 1; transform: none; }
 }
-.transition-slide-left.slot-enter-start {
-  opacity: 0;
-  transform: translateX(60px);
-  z-index: 2;
-  transition: none;
+@keyframes sl-zoom-in {
+  from { opacity: 0; transform: scale(1.12); }
+  to   { opacity: 1; transform: none; }
 }
-.transition-slide-left.slot-leave {
-  opacity: 0;
-  transform: translateX(-60px);
-  z-index: 1;
-  transition: opacity var(--transition-duration) ease, transform var(--transition-duration) cubic-bezier(0.25, 0.46, 0.45, 0.94);
+@keyframes sl-zoom-out {
+  from { opacity: 0; transform: scale(0.88); }
+  to   { opacity: 1; transform: none; }
 }
-.transition-slide-left.slot-idle {
-  opacity: 0;
-  transform: translateX(0);
-  z-index: 0;
-  transition: none;
+@keyframes sl-blur {
+  from { opacity: 0; filter: blur(18px); }
+  to   { opacity: 1; filter: blur(0); }
 }
-
-/* ── Slide Right ── */
-.transition-slide-right.slot-active {
-  opacity: 1;
-  transform: translateX(0);
-  z-index: 2;
-  transition: opacity var(--transition-duration) ease, transform var(--transition-duration) cubic-bezier(0.25, 0.46, 0.45, 0.94);
+@keyframes sl-rotate {
+  from { opacity: 0; transform: rotate(8deg) scale(0.9); }
+  to   { opacity: 1; transform: none; }
 }
-.transition-slide-right.slot-enter-start {
-  opacity: 0;
-  transform: translateX(-60px);
-  z-index: 2;
-  transition: none;
-}
-.transition-slide-right.slot-leave {
-  opacity: 0;
-  transform: translateX(60px);
-  z-index: 1;
-  transition: opacity var(--transition-duration) ease, transform var(--transition-duration) cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-.transition-slide-right.slot-idle {
-  opacity: 0;
-  transform: translateX(0);
-  z-index: 0;
-  transition: none;
-}
-
-/* ── Zoom In (incoming expands from slightly large) ── */
-.transition-zoom-in.slot-active {
-  opacity: 1;
-  transform: scale(1);
-  z-index: 2;
-  transition: opacity var(--transition-duration) ease, transform var(--transition-duration) cubic-bezier(0.16, 1, 0.3, 1);
-}
-.transition-zoom-in.slot-enter-start {
-  opacity: 0;
-  transform: scale(1.12);
-  z-index: 2;
-  transition: none;
-}
-.transition-zoom-in.slot-leave {
-  opacity: 0;
-  transform: scale(0.92);
-  z-index: 1;
-  transition: opacity var(--transition-duration) ease, transform var(--transition-duration) ease-in;
-}
-.transition-zoom-in.slot-idle {
-  opacity: 0;
-  transform: scale(1);
-  z-index: 0;
-  transition: none;
-}
-
-/* ── Zoom Out (incoming grows in from small) ── */
-.transition-zoom-out.slot-active {
-  opacity: 1;
-  transform: scale(1);
-  z-index: 2;
-  transition: opacity var(--transition-duration) ease, transform var(--transition-duration) cubic-bezier(0.16, 1, 0.3, 1);
-}
-.transition-zoom-out.slot-enter-start {
-  opacity: 0;
-  transform: scale(0.88);
-  z-index: 2;
-  transition: none;
-}
-.transition-zoom-out.slot-leave {
-  opacity: 0;
-  transform: scale(1.08);
-  z-index: 1;
-  transition: opacity var(--transition-duration) ease, transform var(--transition-duration) ease-in;
-}
-.transition-zoom-out.slot-idle {
-  opacity: 0;
-  transform: scale(1);
-  z-index: 0;
-  transition: none;
-}
-
-/* ── Blur ── */
-.transition-blur.slot-active {
-  opacity: 1;
-  filter: blur(0px);
-  z-index: 2;
-  transition: opacity var(--transition-duration) ease, filter var(--transition-duration) ease;
-}
-.transition-blur.slot-enter-start {
-  opacity: 0;
-  filter: blur(18px);
-  z-index: 2;
-  transition: none;
-}
-.transition-blur.slot-leave {
-  opacity: 0;
-  filter: blur(18px);
-  z-index: 1;
-  transition: opacity var(--transition-duration) ease, filter var(--transition-duration) ease;
-}
-.transition-blur.slot-idle {
-  opacity: 0;
-  filter: blur(0px);
-  z-index: 0;
-  transition: none;
-}
-
-/* ── Rotate ── */
-.transition-rotate.slot-active {
-  opacity: 1;
-  transform: rotate(0deg) scale(1);
-  z-index: 2;
-  transition: opacity var(--transition-duration) ease, transform var(--transition-duration) cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.transition-rotate.slot-enter-start {
-  opacity: 0;
-  transform: rotate(8deg) scale(0.9);
-  z-index: 2;
-  transition: none;
-}
-.transition-rotate.slot-leave {
-  opacity: 0;
-  transform: rotate(-8deg) scale(0.9);
-  z-index: 1;
-  transition: opacity var(--transition-duration) ease, transform var(--transition-duration) ease-in;
-}
-.transition-rotate.slot-idle {
-  opacity: 0;
-  transform: rotate(0deg) scale(1);
-  z-index: 0;
-  transition: none;
-}
-
-/* ── Flip (3-D Y-axis) ── */
-.transition-flip.slot-active {
-  opacity: 1;
-  transform: perspective(1000px) rotateY(0deg);
-  z-index: 2;
-  transition: opacity var(--transition-duration) ease, transform var(--transition-duration) cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-.transition-flip.slot-enter-start {
-  opacity: 0;
-  transform: perspective(1000px) rotateY(25deg);
-  z-index: 2;
-  transition: none;
-}
-.transition-flip.slot-leave {
-  opacity: 0;
-  transform: perspective(1000px) rotateY(-25deg);
-  z-index: 1;
-  transition: opacity var(--transition-duration) ease, transform var(--transition-duration) cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-.transition-flip.slot-idle {
-  opacity: 0;
-  transform: perspective(1000px) rotateY(0deg);
-  z-index: 0;
-  transition: none;
-}
-
-/* ── None ── */
-.transition-none.slot-active {
-  opacity: 1;
-  z-index: 2;
-}
-.transition-none.slot-enter-start,
-.transition-none.slot-leave,
-.transition-none.slot-idle {
-  opacity: 0;
-  z-index: 0;
+@keyframes sl-flip {
+  from { opacity: 0; transform: perspective(1000px) rotateY(25deg); }
+  to   { opacity: 1; transform: perspective(1000px) rotateY(0deg); }
 }
 
 /* ── Empty placeholder ── */

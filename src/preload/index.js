@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   trashImage: (path) => ipcRenderer.invoke('trash-image', path),
   renameImage: (oldPath, newName) => ipcRenderer.invoke('rename-image', { oldPath, newName }),
   setFullscreen: (enable) => ipcRenderer.invoke('set-fullscreen', enable),
+  setPreventSleep: (enable) => ipcRenderer.invoke('set-prevent-sleep', enable),
+  getReadme: () => ipcRenderer.invoke('get-readme'),
   getFullscreen: () => ipcRenderer.invoke('get-fullscreen'),
   loadConfig: () => ipcRenderer.invoke('load-config'),
   saveConfig: (config) => ipcRenderer.invoke('save-config', config),

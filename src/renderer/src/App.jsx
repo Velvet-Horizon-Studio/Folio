@@ -3,6 +3,7 @@ import FolderManager from './components/FolderManager'
 import ThumbnailBrowser from './components/ThumbnailBrowser'
 import SlideShow from './components/SlideShow'
 import Controls from './components/Controls'
+import HelpOverlay from './components/HelpOverlay'
 import './styles/App.css'
 
 
@@ -32,6 +33,7 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(260)
   const [thumbSize, setThumbSize] = useState(80)
   const [startupBehavior, setStartupBehavior] = useState('resume')
+  const [keepAwake, setKeepAwake] = useState(false)
   const startupBehaviorRef = useRef('resume')
   const sidebarResizing = useRef(false)
   const timerRef = useRef(null)
@@ -41,6 +43,7 @@ export default function App() {
   const imagesRef = useRef([])
   const currentIndexRef = useRef(0)
   const [controlsVisible, setControlsVisible] = useState(true)
+  const [helpText, setHelpText] = useState(null)
   const hideTimerRef = useRef(null)
   const dragCounterRef = useRef(0)
 
@@ -65,6 +68,7 @@ export default function App() {
           setStartupBehavior(cfg.startupBehavior)
           startupBehaviorRef.current = cfg.startupBehavior
         }
+        if (typeof cfg.keepAwake === 'boolean')         setKeepAwake(cfg.keepAwake)
         if (typeof cfg.lastImagePath === 'string')      lastImagePathRef.current = cfg.lastImagePath
       }
       configReady.current = true
@@ -76,14 +80,19 @@ export default function App() {
     if (!configReady.current) return
     const payload = {
       folders, intervalMs, shuffled, transition, transitionDuration,
-      sidebarTab, sidebarWidth, thumbSize, startupBehavior,
+      sidebarTab, sidebarWidth, thumbSize, startupBehavior, keepAwake,
     }
     // Only overwrite lastImagePath once images are loaded so we don't
     // clobber the saved path during the async scan on startup
     if (images.length > 0) payload.lastImagePath = images[currentIndex]?.path ?? null
     window.electronAPI.saveConfig(payload)
   }, [folders, intervalMs, shuffled, transition, transitionDuration,
-      sidebarTab, sidebarWidth, thumbSize, startupBehavior, currentIndex, images])
+      sidebarTab, sidebarWidth, thumbSize, startupBehavior, keepAwake, currentIndex, images])
+
+  // Keep the display awake only while a slideshow is actively playing
+  useEffect(() => {
+    window.electronAPI.setPreventSleep(keepAwake && isPlaying)
+  }, [keepAwake, isPlaying])
 
   useEffect(() => { imagesRef.current = images }, [images])
   useEffect(() => { currentIndexRef.current = currentIndex }, [currentIndex])
@@ -97,11 +106,13 @@ export default function App() {
     return unsubscribe
   }, [])
 
-  // Escape: exit fullscreen if active, otherwise close the window
+  // Escape: close help overlay, else exit fullscreen, else close the window
   useEffect(() => {
     const handler = (e) => {
       if (e.key !== 'Escape') return
-      if (isFullscreen) {
+      if (helpText !== null) {
+        setHelpText(null)
+      } else if (isFullscreen) {
         window.electronAPI.setFullscreen(false)
       } else {
         window.close()
@@ -109,7 +120,7 @@ export default function App() {
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [isFullscreen])
+  }, [isFullscreen, helpText])
 
   // Reload images whenever active folders change
   useEffect(() => {
@@ -264,6 +275,15 @@ export default function App() {
 
   const handleShuffleToggle = useCallback(() => {
     setShuffled((s) => !s)
+  }, [])
+
+  const handleKeepAwakeToggle = useCallback(() => {
+    setKeepAwake((k) => !k)
+  }, [])
+
+  const handleOpenHelp = useCallback(async () => {
+    const text = await window.electronAPI.getReadme()
+    setHelpText(text ?? 'Help content is unavailable.')
   }, [])
 
   const handleJumpTo = useCallback((index) => {
@@ -430,7 +450,7 @@ export default function App() {
             <div className="app-brand">
               <div className="app-name-row">
                 <span className="app-title">Folio</span>
-                <span className="app-version">v.1.1.1</span>
+                <span className="app-version">v.1.1.2</span>
               </div>
               <div className="app-tagline">Your images, beautifully kept.</div>
             </div>
@@ -500,7 +520,9 @@ export default function App() {
           onIntervalChange={setIntervalMs}
           isFullscreen={isFullscreen}
           controlsVisible={controlsVisible}
-          onToggleFullscreen={handleToggleFullscreen}
+          onHelp={handleOpenHelp}
+          keepAwake={keepAwake}
+          onKeepAwakeToggle={handleKeepAwakeToggle}
           shuffled={shuffled}
           onShuffleToggle={handleShuffleToggle}
           transition={transition}
@@ -510,6 +532,10 @@ export default function App() {
           currentIndex={currentIndex}
           total={images.length}
         />
+
+        {helpText !== null && (
+          <HelpOverlay text={helpText} onClose={() => setHelpText(null)} />
+        )}
       </main>
     </div>
   )

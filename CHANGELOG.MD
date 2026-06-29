@@ -4,6 +4,18 @@ All notable changes to Folio are documented here.
 
 ---
 
+## [1.1.2] — 2026-06-29
+
+### Added
+- **Keep Awake** — a toggle in the controls bar that stops the monitor from going to sleep while a slideshow is playing. The display is only kept awake while playback is running, and the setting is remembered between sessions.
+- **Real (1:1) size** — double right-click an image to switch it to its native pixel size, then double right-click again to return to the fitted view. A single right-click still resets zoom and position.
+- **In-app help** — a "?" button next to Keep Awake opens this guide (the README) as an overlay on top of the image. Dismiss it with the ✕, a click outside, or Escape.
+
+### Changed
+- **Removed the Fullscreen button** from the controls bar; fullscreen is still available by double-clicking the image (and Escape still exits it).
+
+---
+
 ## [1.1.1] — 2026-06-05
 
 ### Added

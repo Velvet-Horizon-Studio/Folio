@@ -5,7 +5,8 @@ export default function Controls({
   onPrev, onNext,
   hasImages,
   intervalMs, onIntervalChange,
-  isFullscreen, controlsVisible, onToggleFullscreen,
+  isFullscreen, controlsVisible, onHelp,
+  keepAwake, onKeepAwakeToggle,
   shuffled, onShuffleToggle,
   transition, onTransitionChange,
   transitionDuration, onTransitionDurationChange,
@@ -90,8 +91,8 @@ export default function Controls({
             <input
               type="range"
               min={100}
-              max={3000}
-              step={50}
+              max={10000}
+              step={100}
               value={transitionDuration}
               onChange={(e) => onTransitionDurationChange(Number(e.target.value))}
               className="ctrl-slider ctrl-slider-short"
@@ -102,11 +103,20 @@ export default function Controls({
         )}
 
         <button
-          className={`ctrl-btn ctrl-btn-option${isFullscreen ? ' active' : ''}`}
-          onClick={onToggleFullscreen}
-          title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+          className={`ctrl-btn ctrl-btn-option${keepAwake ? ' active' : ''}`}
+          onClick={onKeepAwakeToggle}
+          title="Keep the screen awake while the slideshow is playing"
         >
-          {isFullscreen ? '⛶ Exit' : '⛶ Fullscreen'}
+          ☕ Keep Awake
+        </button>
+
+        <button
+          className="ctrl-btn ctrl-btn-help"
+          onClick={onHelp}
+          title="Help — open the Folio guide"
+          aria-label="Help"
+        >
+          ?
         </button>
 
       </div>

@@ -16,7 +16,7 @@ images speak for themselves.
   FEATURES
 --------------------------------------------------------------------------------
 
-   SLIDESHOW VIEWER
+  SLIDESHOW VIEWER
   ----------------
   Load images from one or more folders and let Folio run them as a continuous
   slideshow. Choose from multiple transition effects (fade, slide, zoom) and
@@ -28,6 +28,11 @@ images speak for themselves.
   or press Space to pause and resume the automatic slideshow. Double-click any
   image to toggle fullscreen instantly. Right-click to snap the zoom back to
   100 % centered whenever you need a clean starting point.
+
+  Toggle Keep Awake in the controls bar to stop your monitor from going to
+  sleep while a slideshow is playing — ideal for unattended display on a second
+  screen or kiosk. The screen is only kept awake while the slideshow is
+  actually running; pause it and normal power saving resumes.
 
   THUMBNAIL BROWSER
   -----------------
@@ -48,6 +53,10 @@ images speak for themselves.
   keyboard. Once zoomed in, click and drag to pan around the image freely.
   Right-clicking at any time resets both zoom and position back to
   100 % centered.
+
+  Double right-click an image to switch it to its real, native 1:1 pixel size,
+  so a single image pixel maps to a single screen pixel. Double right-click
+  again to return to the fitted view.
 
   LIVE FOLDER WATCHING
   --------------------
@@ -116,6 +125,43 @@ images speak for themselves.
   Choose your preferred startup mode: resume the last image you were viewing,
   always start from the first image, or jump to the last image in the
   collection.
+
+
+--------------------------------------------------------------------------------
+  SHORTCUTS
+--------------------------------------------------------------------------------
+
+  KEYBOARD
+  --------
+    Left Arrow   Previous image (pauses the slideshow)
+    Right Arrow  Next image (pauses the slideshow)
+    Up Arrow     Zoom in
+    Down Arrow   Zoom out
+    Space        Play / pause the slideshow
+    Escape       Exit fullscreen — or close the window if not in fullscreen.
+                 Also dismisses an open context menu.
+    Enter        Confirm an inline rename
+    Escape       Cancel an inline rename
+
+  Arrow and Space shortcuts are ignored while you are typing in a text field
+  (for example, renaming an image).
+
+  MOUSE
+  -----
+    Wheel scroll        Zoom in / out, between 25 % and 500 %
+    Click + drag        Pan around the image while zoomed in
+    Double-click        Toggle fullscreen
+    Right-click         Reset zoom and position to 100 % centered
+    Double right-click  Toggle real, native 1:1 pixel size
+
+  In the thumbnail browser and folder list:
+
+    Click thumbnail     Jump to that image in the viewer
+    Ctrl-click          Add / remove a thumbnail from the multi-selection
+    Right-click thumb   Open the file menu (Copy, Convert, Move to folder)
+    Right-click folder  Open the folder menu (Move all to)
+    Drag ⠿ handle       Reorder folders in the sidebar
+    Drag from Explorer  Drop folders onto the window to add them
 
 
 --------------------------------------------------------------------------------

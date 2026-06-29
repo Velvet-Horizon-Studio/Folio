@@ -1,4 +1,4 @@
-import { app, ipcMain, dialog, nativeImage, shell, Menu, MenuItem, clipboard } from 'electron'
+import { app, ipcMain, dialog, nativeImage, shell, Menu, MenuItem, clipboard, powerSaveBlocker } from 'electron'
 import { readdirSync, statSync, readFileSync, writeFileSync, renameSync, mkdirSync, existsSync, unlinkSync, watch } from 'fs'
 import { join, extname, dirname, basename } from 'path'
 import { createHash } from 'crypto'
@@ -365,6 +365,34 @@ export function registerIpcHandlers(win) {
     }
   })
   // ────────────────────────────────────────────────────────────────────────
+
+  // ── Display-sleep blocker ───────────────────────────────────────────────
+  let powerSaveBlockerId = null
+  ipcMain.handle('set-prevent-sleep', (_event, enable) => {
+    if (enable) {
+      if (powerSaveBlockerId === null || !powerSaveBlocker.isStarted(powerSaveBlockerId)) {
+        powerSaveBlockerId = powerSaveBlocker.start('prevent-display-sleep')
+      }
+    } else if (powerSaveBlockerId !== null) {
+      if (powerSaveBlocker.isStarted(powerSaveBlockerId)) powerSaveBlocker.stop(powerSaveBlockerId)
+      powerSaveBlockerId = null
+    }
+    return powerSaveBlockerId !== null && powerSaveBlocker.isStarted(powerSaveBlockerId)
+  })
+  // ────────────────────────────────────────────────────────────────────────
+
+  ipcMain.handle('get-readme', () => {
+    // README ships at the project root in dev, and in resources/ when packaged
+    const readmePath = app.isPackaged
+      ? join(process.resourcesPath, 'README.MD')
+      : join(app.getAppPath(), 'README.MD')
+    try {
+      return readFileSync(readmePath, 'utf-8')
+    } catch (err) {
+      console.error('[get-readme] failed:', err)
+      return null
+    }
+  })
 
   ipcMain.handle('set-fullscreen', (_event, enable) => {
     win.setFullScreen(enable)
