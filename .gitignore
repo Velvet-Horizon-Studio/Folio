@@ -3,3 +3,4 @@ out/
 dist/
 .claude/
 MEMORY.md
+poc-tauri/
