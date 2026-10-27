@@ -141,6 +141,24 @@ export function registerIpcHandlers(win) {
     return true
   })
 
+  // nativeImage only decodes PNG/JPEG. For anything else (WebP, AVIF, GIF — including
+  // files with a misleading extension) the renderer decodes with Chromium instead:
+  // it reads the raw bytes here, then hands the finished thumbnail back to be cached.
+  ipcMain.handle('read-image-bytes', (_event, filePath) => {
+    try {
+      return readFileSync(filePath)
+    } catch {
+      return null
+    }
+  })
+
+  ipcMain.handle('save-thumbnail', (_event, { path, dataUrl }) => {
+    if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return false
+    thumbnailCache.set(path, dataUrl)
+    saveThumbToDisk(path, dataUrl)
+    return true
+  })
+
   ipcMain.handle('trash-image', async (_event, path) => {
     try {
       await shell.trashItem(path)

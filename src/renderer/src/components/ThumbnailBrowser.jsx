@@ -19,6 +19,53 @@ function formatDate(iso) {
   return new Date(iso).toLocaleString()
 }
 
+// The main process (nativeImage) can only decode PNG/JPEG, so WebP, AVIF, GIF etc. —
+// including files saved with a misleading extension — come back as null. For those,
+// decode with Chromium here and store the result in the main-process cache so it is
+// only generated once. At most 4 run at a time to bound memory on folders of large files.
+const FALLBACK_CONCURRENCY = 4
+let fallbackActive = 0
+const fallbackQueue = []
+
+function withFallbackSlot(fn) {
+  return new Promise((resolve) => {
+    const run = async () => {
+      fallbackActive++
+      try {
+        resolve(await fn())
+      } catch {
+        resolve(null)
+      } finally {
+        fallbackActive--
+        fallbackQueue.shift()?.()
+      }
+    }
+    if (fallbackActive < FALLBACK_CONCURRENCY) run()
+    else fallbackQueue.push(run)
+  })
+}
+
+function rendererThumbnail(path) {
+  return withFallbackSlot(async () => {
+    const bytes = await window.electronAPI.readImageBytes(path)
+    if (!bytes) return null
+    // resizeWidth alone keeps the aspect ratio; decoding happens off the main thread
+    const bitmap = await createImageBitmap(new Blob([bytes]), { resizeWidth: 240, resizeQuality: 'high' })
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height)
+    canvas.getContext('2d').drawImage(bitmap, 0, 0)
+    bitmap.close()
+    const blob = await canvas.convertToBlob({ type: 'image/png' })
+    const dataUrl = await new Promise((res, rej) => {
+      const reader = new FileReader()
+      reader.onload = () => res(reader.result)
+      reader.onerror = rej
+      reader.readAsDataURL(blob)
+    })
+    window.electronAPI.saveThumbnail(path, dataUrl)
+    return dataUrl
+  })
+}
+
 // Individual thumbnail with lazy load, rename, delete, selection, and metadata
 function ThumbnailItem({ img, isActive, isSelected, scrollRef, onJumpTo, onDelete, onRename, onSelect, onContextMenu, onShowMeta, reloadKey }) {
   const [src, setSrc] = useState(null)
@@ -42,7 +89,8 @@ function ThumbnailItem({ img, isActive, isSelected, scrollRef, onJumpTo, onDelet
       ([entry]) => {
         if (entry.isIntersecting) {
           observer.disconnect()
-          window.electronAPI.getThumbnail(img.path).then((dataUrl) => {
+          window.electronAPI.getThumbnail(img.path).then(async (dataUrl) => {
+            if (!dataUrl) dataUrl = await rendererThumbnail(img.path)
             if (dataUrl) setSrc(dataUrl)
           })
         }
