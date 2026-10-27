@@ -7,34 +7,51 @@ import ThumbWorker from './thumbWorker.js?worker&inline'
 const THUMB_SIZE = 320
 const MAX_LONG_SIDE = 1280
 const WEBP_QUALITY = 0.82
+// A decode that takes longer than this is treated as stuck: the worker is replaced
+const JOB_TIMEOUT_MS = 30000
 // Each in-flight job holds a fully decoded image (~48 MB at 12 MP), so the pool is capped
 const POOL_SIZE = Math.max(2, Math.min(8, (navigator.hardwareConcurrency || 4) - 2))
 
 const workers = []
 const idle = []
 const queue = []
-const pending = new Map() // job id → resolve
 const inflight = new Map() // image path → Promise<url|null>
 let nextId = 0
 
+// Each worker runs one job at a time; `job` is its current { id, resolve }
 function getWorker() {
   if (idle.length) return idle.pop()
   if (workers.length < POOL_SIZE) {
     const w = new ThumbWorker()
     w.onmessage = ({ data }) => {
-      pending.get(data.id)?.(data.out)
-      pending.delete(data.id)
+      if (w.job?.id === data.id) finishJob(w, data.out)
     }
+    // A crashed worker fails its job and is dropped; the pool starts a fresh one
+    w.onerror = () => retire(w)
     workers.push(w)
     return w
   }
   return null
 }
 
+function finishJob(w, out) {
+  const job = w.job
+  w.job = null
+  clearTimeout(job?.timer)
+  job?.resolve(out)
+}
+
+function retire(w) {
+  w.dead = true
+  w.terminate()
+  workers.splice(workers.indexOf(w), 1)
+  finishJob(w, null)
+}
+
 function encodeInWorker(worker, bytes) {
   return new Promise((resolve) => {
     const id = ++nextId
-    pending.set(id, resolve)
+    worker.job = { id, resolve, timer: setTimeout(() => retire(worker), JOB_TIMEOUT_MS) }
     // Transfer the buffer instead of copying it (IPC hands us a fresh, unshared one)
     const buf = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
       ? bytes.buffer
@@ -58,7 +75,7 @@ function pump() {
       } catch {
         resolve(null)
       } finally {
-        idle.push(worker)
+        if (!worker.dead) idle.push(worker)
         pump()
       }
     })()

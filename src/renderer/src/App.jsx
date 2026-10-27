@@ -481,7 +481,7 @@ export default function App() {
             <div className="app-brand">
               <div className="app-name-row">
                 <span className="app-title">Folio</span>
-                <span className="app-version">v.1.1.2</span>
+                <span className="app-version">v.1.1.3</span>
               </div>
               <div className="app-tagline">Your images, beautifully kept.</div>
             </div>

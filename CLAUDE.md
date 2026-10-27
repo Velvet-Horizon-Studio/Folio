@@ -61,9 +61,9 @@ Config is loaded once on mount. `lastImagePathRef.current` is set synchronously 
 
 ### Thumbnail cache
 
-WebP files in `app.getPath('userData')/thumbnails/`, named `sha1(path|size|mtimeMs).webp`, so editing a file outside Folio invalidates its thumbnail. The renderer loads them by `file://` URL (no data URLs, no in-memory cache).
+WebP files in `app.getPath('userData')/thumbnails/`, named `<sha1(path)>_<sha1(size|mtimeMs)[0:16]>.webp`, so editing a file outside Folio invalidates its thumbnail. An in-memory `thumbIndex` (sha1(path) → file name) is built from the folder at startup. It lets a regenerated thumbnail replace the old one, and lets rename, move and trash find an image's thumbnail without a stat. Entries unused for 90 days are pruned 15 s after startup; cache hits refresh their mtime at most weekly. Files in any other naming format are deleted at startup. The renderer loads them by `file://` URL (no data URLs, no in-memory cache).
 
-Generation happens in the renderer (`src/renderer/src/thumbnails.js`). A pool of Web Workers (`thumbWorker.js`, inlined via `?worker&inline`, at most 8 or cores − 2) decodes with Chromium (`createImageBitmap`), so every format Chromium knows works, including WebP saved as `.jpg`. Each worker resizes to a shortest side of 320 px (long side capped at 1280) and encodes WebP q0.82. The main process only stats, reads and writes files, so it never blocks. SVGs use the file itself.
+Generation happens in the renderer (`src/renderer/src/thumbnails.js`). A pool of Web Workers (`thumbWorker.js`, inlined via `?worker&inline`, at most 8 or cores − 2; a worker that crashes or exceeds 30 s on a job is terminated and replaced) decodes with Chromium (`createImageBitmap`), so every format Chromium knows works, including WebP saved as `.jpg`. Each worker resizes to a shortest side of 320 px (long side capped at 1280) and encodes WebP q0.82. The main process only stats, reads and writes files, so it never blocks. SVGs use the file itself.
 
 Cache files are renamed on rename and move (size and mtime are unchanged), deleted on trash and editor overwrite, and wiped by `clear-thumbnail-cache` (F5).
 

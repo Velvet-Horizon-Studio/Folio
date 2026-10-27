@@ -1,6 +1,6 @@
 import { app, ipcMain, dialog, nativeImage, shell, Menu, MenuItem, clipboard, powerSaveBlocker } from 'electron'
 import { readdirSync, statSync, readFileSync, writeFileSync, renameSync, mkdirSync, existsSync, unlinkSync, watch } from 'fs'
-import { readFile, writeFile, stat, unlink } from 'fs/promises'
+import { readFile, writeFile, stat, unlink, utimes } from 'fs/promises'
 import { join, extname, dirname, basename } from 'path'
 import { pathToFileURL } from 'url'
 import { createHash } from 'crypto'
@@ -11,37 +11,73 @@ const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bm
 // ── Disk thumbnail cache ─────────────────────────────────────────────────────
 // Thumbnails are WebP files the renderer loads by file:// URL. They're generated in
 // renderer Web Workers, so the main process only stats, reads and writes files.
-// The key includes size + mtime, so a file edited outside Folio gets a fresh thumbnail.
-const THUMB_FILE_RE = /^[0-9a-f]{40}\.webp$/
+// Name: <sha1(path)>_<sha1(size|mtime) prefix>.webp. The version part means a file
+// edited outside Folio gets a fresh thumbnail; the path part lets a newer thumbnail
+// replace an older one for the same image instead of leaving it behind.
+const THUMB_FILE_RE = /^([0-9a-f]{40})_[0-9a-f]{16}\.webp$/
+// Thumbnails not used for this long are pruned at startup (images deleted or edited
+// while Folio was closed, or folders no longer loaded). Hits refresh the age.
+const THUMB_MAX_AGE_MS = 90 * 24 * 3600 * 1000
+const THUMB_TOUCH_AFTER_MS = 7 * 24 * 3600 * 1000
 
 let _thumbDir = null
+const thumbIndex = new Map() // sha1(path) → current cache file name
 function thumbDir() {
   if (!_thumbDir) {
     _thumbDir = join(app.getPath('userData'), 'thumbnails')
     mkdirSync(_thumbDir, { recursive: true })
-    // One-time cleanup of the old base64 data-URL cache (.dat files)
     for (const f of readdirSync(_thumbDir)) {
-      if (f.endsWith('.dat')) unlink(join(_thumbDir, f)).catch(() => {})
+      const m = THUMB_FILE_RE.exec(f)
+      // Anything else is from an older cache format (.dat data URLs, plain-hash .webp)
+      if (m) thumbIndex.set(m[1], f)
+      else unlink(join(_thumbDir, f)).catch(() => {})
     }
+    setTimeout(pruneOldThumbs, 15000) // off the startup path
   }
   return _thumbDir
 }
 
+async function pruneOldThumbs() {
+  const cutoff = Date.now() - THUMB_MAX_AGE_MS
+  for (const [key, f] of [...thumbIndex]) {
+    try {
+      const p = join(_thumbDir, f)
+      if ((await stat(p)).mtimeMs < cutoff) {
+        await unlink(p)
+        if (thumbIndex.get(key) === f) thumbIndex.delete(key)
+      }
+    } catch {}
+  }
+}
+
+const pathKey = (imagePath) => createHash('sha1').update(imagePath).digest('hex')
+
 function thumbFile(imagePath, st) {
-  const hash = createHash('sha1').update(`${imagePath}|${st.size}|${st.mtimeMs}`).digest('hex')
-  return join(thumbDir(), hash + '.webp')
+  const version = createHash('sha1').update(`${st.size}|${st.mtimeMs}`).digest('hex').slice(0, 16)
+  return join(thumbDir(), `${pathKey(imagePath)}_${version}.webp`)
 }
 
 function deleteThumbFor(imagePath) {
-  try { unlinkSync(thumbFile(imagePath, statSync(imagePath))) } catch {}
+  thumbDir()
+  const key = pathKey(imagePath)
+  const f = thumbIndex.get(key)
+  if (!f) return
+  thumbIndex.delete(key)
+  unlink(join(_thumbDir, f)).catch(() => {})
 }
 
 // After a rename/move (size and mtime unchanged), carry the cached thumbnail over
 function renameThumbOnDisk(oldPath, newPath) {
+  thumbDir()
+  const oldKey = pathKey(oldPath)
+  const f = thumbIndex.get(oldKey)
+  if (!f) return
+  const newKey = pathKey(newPath)
+  const moved = newKey + f.slice(oldKey.length)
   try {
-    const st = statSync(newPath)
-    const src = thumbFile(oldPath, st)
-    if (existsSync(src)) renameSync(src, thumbFile(newPath, st))
+    renameSync(join(_thumbDir, f), join(_thumbDir, moved))
+    thumbIndex.delete(oldKey)
+    thumbIndex.set(newKey, moved)
   } catch {}
 }
 // ────────────────────────────────────────────────────────────────────────────
@@ -133,7 +169,12 @@ export function registerIpcHandlers(win) {
     try {
       const file = thumbFile(path, await stat(path))
       try {
-        await stat(file)
+        const st = await stat(file)
+        // Keep thumbnails in use from being pruned as old
+        if (Date.now() - st.mtimeMs > THUMB_TOUCH_AFTER_MS) {
+          const now = new Date()
+          utimes(file, now, now).catch(() => {})
+        }
         return { url: pathToFileURL(file).href }
       } catch {
         return { file }
@@ -152,6 +193,7 @@ export function registerIpcHandlers(win) {
         try { unlinkSync(join(dir, f)) } catch {}
       }
     } catch {}
+    thumbIndex.clear()
     return true
   })
 
@@ -166,9 +208,15 @@ export function registerIpcHandlers(win) {
 
   // Only accepts a cache file name handed out by get-thumbnail, inside the cache dir
   ipcMain.handle('save-thumbnail', async (_event, { file, bytes }) => {
-    if (typeof file !== 'string' || dirname(file) !== thumbDir() || !THUMB_FILE_RE.test(basename(file))) return null
+    const m = typeof file === 'string' && dirname(file) === thumbDir() && THUMB_FILE_RE.exec(basename(file))
+    if (!m) return null
     try {
       await writeFile(file, Buffer.from(bytes))
+      // Replace the image's previous thumbnail (it was edited) rather than orphan it
+      const name = basename(file)
+      const prev = thumbIndex.get(m[1])
+      if (prev && prev !== name) unlink(join(thumbDir(), prev)).catch(() => {})
+      thumbIndex.set(m[1], name)
       return pathToFileURL(file).href
     } catch {
       return null
@@ -206,7 +254,7 @@ export function registerIpcHandlers(win) {
 
   ipcMain.handle('trash-image', async (_event, path) => {
     try {
-      deleteThumbFor(path) // needs the file's stat, so before it goes
+      deleteThumbFor(path)
       await shell.trashItem(path)
     } catch (err) {
       console.error('[trash-image] failed:', err)
