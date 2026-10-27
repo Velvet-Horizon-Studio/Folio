@@ -466,6 +466,43 @@
   flex-shrink: 0;
 }
 
+.tb-reload-btn {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tb-reload-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: #444;
+  color: var(--text);
+}
+
+.tb-reload-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.tb-reload-btn.tb-reloading {
+  animation: tb-spin 0.6s linear infinite;
+}
+
+@keyframes tb-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 .tb-size-slider {
   flex: 1;
   height: 4px;

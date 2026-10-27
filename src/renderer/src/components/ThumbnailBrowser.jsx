@@ -20,7 +20,7 @@ function formatDate(iso) {
 }
 
 // Individual thumbnail with lazy load, rename, delete, selection, and metadata
-function ThumbnailItem({ img, isActive, isSelected, scrollRef, onJumpTo, onDelete, onRename, onSelect, onContextMenu, onShowMeta }) {
+function ThumbnailItem({ img, isActive, isSelected, scrollRef, onJumpTo, onDelete, onRename, onSelect, onContextMenu, onShowMeta, reloadKey }) {
   const [src, setSrc] = useState(null)
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState('')
@@ -35,6 +35,9 @@ function ThumbnailItem({ img, isActive, isSelected, scrollRef, onJumpTo, onDelet
   useEffect(() => {
     const el = btnRef.current
     if (!el) return
+    // Reset to the placeholder so a reload visibly re-fetches (and unsticks a
+    // thumbnail that previously failed to load).
+    setSrc(null)
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
@@ -48,7 +51,7 @@ function ThumbnailItem({ img, isActive, isSelected, scrollRef, onJumpTo, onDelet
     )
     observer.observe(el)
     return () => observer.disconnect()
-  }, [img.path])
+  }, [img.path, reloadKey])
 
   useEffect(() => {
     if (renaming && inputRef.current) {
@@ -145,7 +148,7 @@ const CONVERT_FORMATS = [
 
 
 
-export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDelete, onRename, onMove, onBulkMoved, folders, thumbSize, onThumbSizeChange }) {
+export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDelete, onRename, onMove, onBulkMoved, folders, thumbSize, onThumbSizeChange, reloadKey, onReload }) {
   const activeRef = useRef(null)
   const menuRef = useRef(null)
   const [contextMenu, setContextMenu] = useState(null)
@@ -155,6 +158,16 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
   const [selected, setSelected] = useState(new Set())
   const [converting, setConverting] = useState(false)
   const [metaInfo, setMetaInfo] = useState(null)
+  const [reloading, setReloading] = useState(false)
+
+  // Flash the spinner whenever a reload is triggered (footer button or app-wide F5)
+  const reloadInit = useRef(true)
+  useEffect(() => {
+    if (reloadInit.current) { reloadInit.current = false; return }
+    setReloading(true)
+    const t = setTimeout(() => setReloading(false), 600)
+    return () => clearTimeout(t)
+  }, [reloadKey])
 
   useEffect(() => {
     if (activeRef.current) {
@@ -309,6 +322,7 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
                     onSelect={toggleSelect}
                     onContextMenu={(x, y, path) => setContextMenu({ x, y, path })}
                     onShowMeta={handleShowMeta}
+                    reloadKey={reloadKey}
                   />
                 ))}
               </div>
@@ -392,6 +406,14 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
       )}
 
       <div className="tb-footer">
+        <button
+          className={`tb-reload-btn${reloading ? ' tb-reloading' : ''}`}
+          onClick={onReload}
+          disabled={reloading || images.length === 0}
+          title="Reload thumbnails (F5) — if any are stuck"
+        >
+          ↻
+        </button>
         <span className="tb-footer-icon">⊞</span>
         <input
           type="range"

@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectFolder: () => ipcRenderer.invoke('select-folder'),
   scanImages: (folders) => ipcRenderer.invoke('scan-images', folders),
   getThumbnail: (path) => ipcRenderer.invoke('get-thumbnail', path),
+  reloadThumbnails: () => ipcRenderer.invoke('clear-thumbnail-cache'),
   trashImage: (path) => ipcRenderer.invoke('trash-image', path),
   renameImage: (oldPath, newName) => ipcRenderer.invoke('rename-image', { oldPath, newName }),
   setFullscreen: (enable) => ipcRenderer.invoke('set-fullscreen', enable),

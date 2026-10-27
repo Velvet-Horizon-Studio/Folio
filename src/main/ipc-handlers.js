@@ -128,6 +128,19 @@ export function registerIpcHandlers(win) {
     }
   })
 
+  ipcMain.handle('clear-thumbnail-cache', () => {
+    // Drop every cached thumbnail (memory + disk) so the next fetch regenerates
+    // from source — used by the renderer's "reload thumbnails" button.
+    thumbnailCache.clear()
+    try {
+      const dir = thumbDir()
+      for (const f of readdirSync(dir)) {
+        try { unlinkSync(join(dir, f)) } catch {}
+      }
+    } catch {}
+    return true
+  })
+
   ipcMain.handle('trash-image', async (_event, path) => {
     try {
       await shell.trashItem(path)

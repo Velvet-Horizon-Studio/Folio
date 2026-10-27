@@ -44,6 +44,7 @@ export default function App() {
   const currentIndexRef = useRef(0)
   const [controlsVisible, setControlsVisible] = useState(true)
   const [helpText, setHelpText] = useState(null)
+  const [thumbReloadKey, setThumbReloadKey] = useState(0)
   const hideTimerRef = useRef(null)
   const dragCounterRef = useRef(0)
 
@@ -286,6 +287,24 @@ export default function App() {
     setHelpText(text ?? 'Help content is unavailable.')
   }, [])
 
+  // Reload thumbnails: clear the cache and bump the key so every item re-fetches
+  const handleReloadThumbnails = useCallback(async () => {
+    try { await window.electronAPI.reloadThumbnails() } catch {}
+    setThumbReloadKey((k) => k + 1)
+  }, [])
+
+  // F5 reloads thumbnails from anywhere in the app
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === 'F5') {
+        e.preventDefault()
+        handleReloadThumbnails()
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [handleReloadThumbnails])
+
   const handleJumpTo = useCallback((index) => {
     setIsPlaying(false)
     setCurrentIndex(index)
@@ -494,6 +513,8 @@ export default function App() {
               folders={folders}
               thumbSize={thumbSize}
               onThumbSizeChange={setThumbSize}
+              reloadKey={thumbReloadKey}
+              onReload={handleReloadThumbnails}
             />
           )}
         </aside>
