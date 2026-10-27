@@ -1,48 +1,47 @@
 import { app, ipcMain, dialog, nativeImage, shell, Menu, MenuItem, clipboard, powerSaveBlocker } from 'electron'
 import { readdirSync, statSync, readFileSync, writeFileSync, renameSync, mkdirSync, existsSync, unlinkSync, watch } from 'fs'
+import { readFile, writeFile, stat, unlink } from 'fs/promises'
 import { join, extname, dirname, basename } from 'path'
+import { pathToFileURL } from 'url'
 import { createHash } from 'crypto'
 import { execFileSync } from 'child_process'
-
-const thumbnailCache = new Map()
 
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.tif', '.avif', '.svg'])
 
 // ── Disk thumbnail cache ─────────────────────────────────────────────────────
+// Thumbnails are WebP files the renderer loads by file:// URL. They're generated in
+// renderer Web Workers, so the main process only stats, reads and writes files.
+// The key includes size + mtime, so a file edited outside Folio gets a fresh thumbnail.
+const THUMB_FILE_RE = /^[0-9a-f]{40}\.webp$/
+
 let _thumbDir = null
 function thumbDir() {
   if (!_thumbDir) {
     _thumbDir = join(app.getPath('userData'), 'thumbnails')
     mkdirSync(_thumbDir, { recursive: true })
+    // One-time cleanup of the old base64 data-URL cache (.dat files)
+    for (const f of readdirSync(_thumbDir)) {
+      if (f.endsWith('.dat')) unlink(join(_thumbDir, f)).catch(() => {})
+    }
   }
   return _thumbDir
 }
 
-function thumbDiskPath(imagePath) {
-  const hash = createHash('sha1').update(imagePath).digest('hex')
-  return join(thumbDir(), hash + '.dat')
+function thumbFile(imagePath, st) {
+  const hash = createHash('sha1').update(`${imagePath}|${st.size}|${st.mtimeMs}`).digest('hex')
+  return join(thumbDir(), hash + '.webp')
 }
 
-function loadThumbFromDisk(imagePath) {
-  try {
-    const p = thumbDiskPath(imagePath)
-    if (existsSync(p)) return readFileSync(p, 'utf-8')
-  } catch {}
-  return null
+function deleteThumbFor(imagePath) {
+  try { unlinkSync(thumbFile(imagePath, statSync(imagePath))) } catch {}
 }
 
-function saveThumbToDisk(imagePath, dataUrl) {
-  try { writeFileSync(thumbDiskPath(imagePath), dataUrl, 'utf-8') } catch {}
-}
-
-function deleteThumbFromDisk(imagePath) {
-  try { unlinkSync(thumbDiskPath(imagePath)) } catch {}
-}
-
+// After a rename/move (size and mtime unchanged), carry the cached thumbnail over
 function renameThumbOnDisk(oldPath, newPath) {
   try {
-    const src = thumbDiskPath(oldPath)
-    if (existsSync(src)) renameSync(src, thumbDiskPath(newPath))
+    const st = statSync(newPath)
+    const src = thumbFile(oldPath, st)
+    if (existsSync(src)) renameSync(src, thumbFile(newPath, st))
   } catch {}
 }
 // ────────────────────────────────────────────────────────────────────────────
@@ -128,33 +127,25 @@ export function registerIpcHandlers(win) {
     }
   })
 
+  // { url } when a cached thumbnail exists, { file } (where to save one) when it
+  // must be generated, null when the image itself can't be read
   ipcMain.handle('get-thumbnail', async (_event, path) => {
-    // 1. Memory cache
-    if (thumbnailCache.has(path)) return thumbnailCache.get(path)
-    // 2. Disk cache
-    const fromDisk = loadThumbFromDisk(path)
-    if (fromDisk) {
-      thumbnailCache.set(path, fromDisk)
-      return fromDisk
-    }
-    // 3. Generate and persist
     try {
-      const img = nativeImage.createFromPath(path)
-      if (img.isEmpty()) return null
-      const thumb = img.resize({ width: 240, quality: 'good' })
-      const dataUrl = thumb.toDataURL()
-      thumbnailCache.set(path, dataUrl)
-      saveThumbToDisk(path, dataUrl)
-      return dataUrl
+      const file = thumbFile(path, await stat(path))
+      try {
+        await stat(file)
+        return { url: pathToFileURL(file).href }
+      } catch {
+        return { file }
+      }
     } catch {
       return null
     }
   })
 
   ipcMain.handle('clear-thumbnail-cache', () => {
-    // Drop every cached thumbnail (memory + disk) so the next fetch regenerates
-    // from source — used by the renderer's "reload thumbnails" button.
-    thumbnailCache.clear()
+    // Drop every cached thumbnail so the next fetch regenerates from source —
+    // used by the renderer's "reload thumbnails" button.
     try {
       const dir = thumbDir()
       for (const f of readdirSync(dir)) {
@@ -164,22 +155,24 @@ export function registerIpcHandlers(win) {
     return true
   })
 
-  // nativeImage only decodes PNG/JPEG. For anything else (WebP, AVIF, GIF — including
-  // files with a misleading extension) the renderer decodes with Chromium instead:
-  // it reads the raw bytes here, then hands the finished thumbnail back to be cached.
-  ipcMain.handle('read-image-bytes', (_event, filePath) => {
+  // Raw file bytes for renderer-side (Chromium) decoding: thumbnails and the editor
+  ipcMain.handle('read-image-bytes', async (_event, filePath) => {
     try {
-      return readFileSync(filePath)
+      return await readFile(filePath)
     } catch {
       return null
     }
   })
 
-  ipcMain.handle('save-thumbnail', (_event, { path, dataUrl }) => {
-    if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return false
-    thumbnailCache.set(path, dataUrl)
-    saveThumbToDisk(path, dataUrl)
-    return true
+  // Only accepts a cache file name handed out by get-thumbnail, inside the cache dir
+  ipcMain.handle('save-thumbnail', async (_event, { file, bytes }) => {
+    if (typeof file !== 'string' || dirname(file) !== thumbDir() || !THUMB_FILE_RE.test(basename(file))) return null
+    try {
+      await writeFile(file, Buffer.from(bytes))
+      return pathToFileURL(file).href
+    } catch {
+      return null
+    }
   })
 
   // Resize/crop editor output. The renderer encodes the result (Chromium canvas);
@@ -203,18 +196,18 @@ export function registerIpcHandlers(win) {
       targetPath = result.filePath
     }
 
-    if (existsSync(targetPath)) await shell.trashItem(targetPath)
+    if (existsSync(targetPath)) {
+      deleteThumbFor(targetPath)
+      await shell.trashItem(targetPath)
+    }
     writeFileSync(targetPath, out)
-    thumbnailCache.delete(targetPath)
-    deleteThumbFromDisk(targetPath)
     return targetPath
   })
 
   ipcMain.handle('trash-image', async (_event, path) => {
     try {
+      deleteThumbFor(path) // needs the file's stat, so before it goes
       await shell.trashItem(path)
-      thumbnailCache.delete(path)
-      deleteThumbFromDisk(path)
     } catch (err) {
       console.error('[trash-image] failed:', err)
       throw err
@@ -225,12 +218,6 @@ export function registerIpcHandlers(win) {
     const ext = extname(oldPath)
     const newPath = join(dirname(oldPath), newName + ext)
     renameSync(oldPath, newPath)
-    // Update memory cache
-    if (thumbnailCache.has(oldPath)) {
-      thumbnailCache.set(newPath, thumbnailCache.get(oldPath))
-      thumbnailCache.delete(oldPath)
-    }
-    // Update disk cache
     renameThumbOnDisk(oldPath, newPath)
     return newPath
   })
@@ -366,10 +353,6 @@ export function registerIpcHandlers(win) {
       try {
         if (sourcePath !== destPath) {
           renameSync(sourcePath, destPath)
-          if (thumbnailCache.has(sourcePath)) {
-            thumbnailCache.set(destPath, thumbnailCache.get(sourcePath))
-            thumbnailCache.delete(sourcePath)
-          }
           renameThumbOnDisk(sourcePath, destPath)
         }
         results.push({ sourcePath, destPath, ok: true })
@@ -385,10 +368,6 @@ export function registerIpcHandlers(win) {
     const destPath = join(targetFolder, name)
     if (sourcePath === destPath) return sourcePath
     renameSync(sourcePath, destPath)
-    if (thumbnailCache.has(sourcePath)) {
-      thumbnailCache.set(destPath, thumbnailCache.get(sourcePath))
-      thumbnailCache.delete(sourcePath)
-    }
     renameThumbOnDisk(sourcePath, destPath)
     return destPath
   })

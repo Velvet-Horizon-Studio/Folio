@@ -6,7 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getThumbnail: (path) => ipcRenderer.invoke('get-thumbnail', path),
   reloadThumbnails: () => ipcRenderer.invoke('clear-thumbnail-cache'),
   readImageBytes: (path) => ipcRenderer.invoke('read-image-bytes', path),
-  saveThumbnail: (path, dataUrl) => ipcRenderer.invoke('save-thumbnail', { path, dataUrl }),
+  saveThumbnail: (file, bytes) => ipcRenderer.invoke('save-thumbnail', { file, bytes }),
   saveEditedImage: (sourcePath, bytes, ext, mode) => ipcRenderer.invoke('save-edited-image', { sourcePath, bytes, ext, mode }),
   trashImage: (path) => ipcRenderer.invoke('trash-image', path),
   renameImage: (oldPath, newName) => ipcRenderer.invoke('rename-image', { oldPath, newName }),

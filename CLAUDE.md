@@ -61,14 +61,20 @@ Config is loaded once on mount. `lastImagePathRef.current` is set synchronously 
 
 ### Thumbnail cache
 
-Two-tier: in-memory `Map` + SHA-1-keyed files in `app.getPath('userData')/thumbnails/`. Generated via `nativeImage.resize({ width: 240 })`. Cache entries are updated on rename and move, deleted on trash.
+WebP files in `app.getPath('userData')/thumbnails/`, named `sha1(path|size|mtimeMs).webp`, so editing a file outside Folio invalidates its thumbnail. The renderer loads them by `file://` URL (no data URLs, no in-memory cache).
+
+Generation happens in the renderer (`src/renderer/src/thumbnails.js`). A pool of Web Workers (`thumbWorker.js`, inlined via `?worker&inline`, at most 8 or cores − 2) decodes with Chromium (`createImageBitmap`), so every format Chromium knows works, including WebP saved as `.jpg`. Each worker resizes to a shortest side of 320 px (long side capped at 1280) and encodes WebP q0.82. The main process only stats, reads and writes files, so it never blocks. SVGs use the file itself.
+
+Cache files are renamed on rename and move (size and mtime are unchanged), deleted on trash and editor overwrite, and wiped by `clear-thumbnail-cache` (F5).
 
 ### IPC channels
 
 | Channel | Direction | Purpose |
 |---|---|---|
 | `scan-images` | renderer→main | Scan folders, return `{ path, folder }[]` |
-| `get-thumbnail` | renderer→main | Return data URL (memory → disk → generate) |
+| `get-thumbnail` | renderer→main | `{ url }` if cached, `{ file }` (cache path to fill) if not, `null` if unreadable |
+| `read-image-bytes` | renderer→main | Raw file bytes for worker / editor decoding |
+| `save-thumbnail` | renderer→main | Write worker-encoded WebP to a `file` from `get-thumbnail` (validated to the cache dir) |
 | `watch-folders` | renderer→main | Set up fs.watch on folders |
 | `images-updated` | main→renderer | Push new image list after fs change |
 | `trash-image` | renderer→main | Move file to Recycle Bin |
