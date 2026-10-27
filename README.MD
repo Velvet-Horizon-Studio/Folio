@@ -119,6 +119,14 @@ images speak for themselves.
                  be undone. PNG generation parameters are kept when saving to
                  PNG.
 
+    Bulk resize  Select several thumbnails (Ctrl-click) and use the Resize…
+                 button in the bulk action bar. Scale them by a percentage or
+                 fit their longest side to a pixel size; images already
+                 smaller are skipped, never enlarged. Save them as new
+                 _resized files (same format, or PNG, JPEG or WebP), or
+                 overwrite the originals in their own format, with the
+                 originals going to the Recycle Bin.
+
   FOLDER MANAGEMENT
   -----------------
   Drag the ⠿ handle on any folder row in the sidebar to reorder it. The

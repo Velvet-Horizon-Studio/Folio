@@ -8,11 +8,13 @@ All notable changes to Folio are documented here.
 
 ### Added
 - **Resize / Crop editor**: right-click a thumbnail and choose "Resize / Crop…". Drag or draw the crop box, or type exact X/Y/W/H values. Choose an aspect-ratio preset, set the output size in pixels or by percentage, and pick PNG, JPEG or WebP with adjustable quality. **Save as new…** writes a separate file. **Overwrite** replaces the original and moves it to the Recycle Bin first. Stable Diffusion parameters in PNG files are kept.
+- **Bulk resize**: select several thumbnails and use "⤡ Resize…" in the bulk action bar. Scale by a percentage or fit the longest side to a pixel size; images already within the size are skipped. Save as new `_resized` files (keeping the format, or as PNG, JPEG or WebP) or overwrite the originals in place, with the originals moved to the Recycle Bin. PNG generation parameters are kept.
 - **Thumbnail reload**: a ↻ button in the Browse footer and F5 anywhere in the app clear and regenerate thumbnails.
 
 ### Changed
 - **Faster thumbnails**: thumbnails are now generated in parallel background workers instead of one at a time in the main process. A cold load of a 101-image folder dropped from ~4.7 s to ~2.0 s, and the app stays responsive while it runs (main-process stalls went from up to 2.8 s to under 30 ms). Thumbnails are stored as small WebP files, so the cache is ~9× smaller (17.1 MB → 1.9 MB for 101 images) and warm loads are about twice as fast. They're also sharper (320 px), and they refresh automatically when a file is edited outside Folio.
 - **Self-cleaning thumbnail cache**: a new thumbnail replaces the image's old one instead of leaving it behind. Thumbnails unused for 90 days (deleted images, folders no longer loaded) are cleaned up automatically, and files from the old cache format are removed on first launch.
+- **Visible thumbnails first**: when you scroll quickly through a large folder, thumbnails you've already scrolled past are dropped from the queue, so the ones on screen load right away. Fast-scrolling a 606-image folder, the thumbnails at the bottom were ready in 0.3 s instead of 9.2 s.
 - **More robust thumbnail generation**: if a background worker crashes or gets stuck on a file for 30 s, it's replaced automatically and the other thumbnails keep loading.
 
 ### Fixed

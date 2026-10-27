@@ -523,6 +523,7 @@ export default function App() {
               onMove={handleMoveImage}
               onBulkMoved={handleBulkMoved}
               onEdit={setEditPath}
+              onEditSaved={handleEditSaved}
               editVersions={editVersions}
               folders={folders}
               thumbSize={thumbSize}

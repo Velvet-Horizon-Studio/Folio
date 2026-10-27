@@ -33,6 +33,9 @@ src/renderer/src/
   components/SlideShow.jsx       ← Main image viewer with transitions and zoom/pan
   components/Controls.jsx        ← Playback controls bar
   components/ImageEditor.jsx     ← Resize / crop modal (canvas encode in renderer, save via IPC)
+  components/BulkResize.jsx      ← Bulk-bar "Resize…" popover; runs resizes through the worker pool
+  thumbnails.js                  ← Worker pool + scheduling: requestThumbnail(), resizeImage()
+  imageWorker.js                 ← Web Worker: decode → resize → encode (thumb and bulk resize ops)
 ```
 
 ### State in App.jsx
@@ -63,7 +66,9 @@ Config is loaded once on mount. `lastImagePathRef.current` is set synchronously 
 
 WebP files in `app.getPath('userData')/thumbnails/`, named `<sha1(path)>_<sha1(size|mtimeMs)[0:16]>.webp`, so editing a file outside Folio invalidates its thumbnail. An in-memory `thumbIndex` (sha1(path) → file name) is built from the folder at startup. It lets a regenerated thumbnail replace the old one, and lets rename, move and trash find an image's thumbnail without a stat. Entries unused for 90 days are pruned 15 s after startup; cache hits refresh their mtime at most weekly. Files in any other naming format are deleted at startup. The renderer loads them by `file://` URL (no data URLs, no in-memory cache).
 
-Generation happens in the renderer (`src/renderer/src/thumbnails.js`). A pool of Web Workers (`thumbWorker.js`, inlined via `?worker&inline`, at most 8 or cores − 2; a worker that crashes or exceeds 30 s on a job is terminated and replaced) decodes with Chromium (`createImageBitmap`), so every format Chromium knows works, including WebP saved as `.jpg`. Each worker resizes to a shortest side of 320 px (long side capped at 1280) and encodes WebP q0.82. The main process only stats, reads and writes files, so it never blocks. SVGs use the file itself.
+Generation happens in the renderer (`src/renderer/src/thumbnails.js`). A pool of Web Workers (`imageWorker.js`, inlined via `?worker&inline`, at most 8 or cores − 2; a worker that crashes or exceeds its job timeout is terminated and replaced) decodes with Chromium (`createImageBitmap`), so every format Chromium knows works, including WebP saved as `.jpg`. Each worker resizes to a shortest side of 320 px (long side capped at 1280) and encodes WebP q0.82. The main process only stats, reads and writes files, so it never blocks. SVGs use the file itself.
+
+Scheduling: thumbnail misses go into a LIFO queue (the newest request is what just scrolled into view). `ThumbnailItem` keeps its IntersectionObserver connected and cancels its request when it leaves the viewport (+200 px), so queued thumbnails that were scrolled past are dropped. Bulk resize jobs use a separate FIFO queue, at most 3 at a time, and only run when no thumbnail is waiting.
 
 Cache files are renamed on rename and move (size and mtime are unchanged), deleted on trash and editor overwrite, and wiped by `clear-thumbnail-cache` (F5).
 
@@ -82,7 +87,7 @@ Cache files are renamed on rename and move (size and mtime are unchanged), delet
 | `move-image` | renderer→main | Move single file to another folder |
 | `move-images-bulk` | renderer→main | Move multiple files, return `{ sourcePath, destPath, ok }[]` |
 | `convert-image` | renderer→main | Convert with save dialog |
-| `save-edited-image` | renderer→main | Write Resize/Crop editor output (new file via dialog, or overwrite after trashing the original); copies PNG text chunks |
+| `save-edited-image` | renderer→main | Write editor / bulk-resize output: `new` (save dialog), `sibling` (`<stem><suffix>.<ext>` next to the source, uniquified, no dialog), or `overwrite` (original trashed first); copies PNG text chunks |
 | `convert-images-bulk` | renderer→main | Convert in-place, return `{ success, failed }` |
 | `copy-image` | renderer→main | CF_HDROP clipboard via PowerShell |
 | `get-image-metadata` | renderer→main | PNG tEXt chunk parser for SD params |

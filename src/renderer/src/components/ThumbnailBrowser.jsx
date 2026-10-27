@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { loadThumbnail } from '../thumbnails'
+import { requestThumbnail } from '../thumbnails'
+import BulkResize from './BulkResize'
 import './ThumbnailBrowser.css'
 
 function basename(p) {
@@ -39,18 +40,30 @@ function ThumbnailItem({ img, isActive, isSelected, scrollRef, onJumpTo, onDelet
     // Reset to the placeholder so a reload visibly re-fetches (and unsticks a
     // thumbnail that previously failed to load).
     setSrc(null)
-    let alive = true
+    // Request while near the viewport; if it scrolls away before its turn, the
+    // request is dropped so whatever is on screen now gets generated first
+    let cancel = null
+    let done = false
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          observer.disconnect()
-          loadThumbnail(img.path).then((url) => { if (alive && url) setSrc(url) })
+          if (!cancel && !done) {
+            cancel = requestThumbnail(img.path, (url) => {
+              done = true
+              cancel = null
+              observer.disconnect()
+              if (url) setSrc(url)
+            })
+          }
+        } else if (cancel) {
+          cancel()
+          cancel = null
         }
       },
       { rootMargin: '200px' }
     )
     observer.observe(el)
-    return () => { alive = false; observer.disconnect() }
+    return () => { cancel?.(); observer.disconnect() }
   }, [img.path, reloadKey, version])
 
   useEffect(() => {
@@ -148,7 +161,7 @@ const CONVERT_FORMATS = [
 
 
 
-export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDelete, onRename, onMove, onBulkMoved, onEdit, editVersions, folders, thumbSize, onThumbSizeChange, reloadKey, onReload }) {
+export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDelete, onRename, onMove, onBulkMoved, onEdit, onEditSaved, editVersions, folders, thumbSize, onThumbSizeChange, reloadKey, onReload }) {
   const activeRef = useRef(null)
   const menuRef = useRef(null)
   const [contextMenu, setContextMenu] = useState(null)
@@ -352,6 +365,13 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
           >
             → JPEG
           </button>
+          <BulkResize
+            paths={[...selected]}
+            onFinished={(overwritten) => {
+              for (const p of overwritten) onEditSaved(p, 'overwrite')
+              setSelected(new Set())
+            }}
+          />
           {folders && folders.length > 0 && (
             <div className="tb-bulk-move-wrap" ref={bulkMoveRef}>
               <button

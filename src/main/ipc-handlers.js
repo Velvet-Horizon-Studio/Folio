@@ -223,10 +223,11 @@ export function registerIpcHandlers(win) {
     }
   })
 
-  // Resize/crop editor output. The renderer encodes the result (Chromium canvas);
-  // this writes it either to a new file (save dialog) or over the original, in which
-  // case the original goes to the Recycle Bin first so the overwrite can be undone.
-  ipcMain.handle('save-edited-image', async (_event, { sourcePath, bytes, ext, mode }) => {
+  // Resize/crop editor and bulk resize output. The renderer encodes the result; this
+  // writes it to a new file chosen in a save dialog ('new'), to a new file next to the
+  // source with a suffix and no dialog ('sibling', for bulk), or over the original
+  // ('overwrite'), which goes to the Recycle Bin first so it can be undone.
+  ipcMain.handle('save-edited-image', async (_event, { sourcePath, bytes, ext, mode, suffix = '_edit' }) => {
     let out = Buffer.from(bytes)
     if (ext === 'png') {
       try { out = copyPngTextChunks(readFileSync(sourcePath), out) } catch {}
@@ -242,6 +243,12 @@ export function registerIpcHandlers(win) {
       })
       if (result.canceled || !result.filePath) return null
       targetPath = result.filePath
+    } else if (mode === 'sibling') {
+      const stem = basename(sourcePath).replace(/\.[^.]+$/, '')
+      targetPath = join(dirname(sourcePath), `${stem}${suffix}.${ext}`)
+      for (let n = 2; existsSync(targetPath); n++) {
+        targetPath = join(dirname(sourcePath), `${stem}${suffix}_${n}.${ext}`)
+      }
     }
 
     if (existsSync(targetPath)) {

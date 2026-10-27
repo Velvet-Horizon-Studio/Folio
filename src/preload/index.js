@@ -7,7 +7,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   reloadThumbnails: () => ipcRenderer.invoke('clear-thumbnail-cache'),
   readImageBytes: (path) => ipcRenderer.invoke('read-image-bytes', path),
   saveThumbnail: (file, bytes) => ipcRenderer.invoke('save-thumbnail', { file, bytes }),
-  saveEditedImage: (sourcePath, bytes, ext, mode) => ipcRenderer.invoke('save-edited-image', { sourcePath, bytes, ext, mode }),
+  saveEditedImage: (sourcePath, bytes, ext, mode, suffix) => ipcRenderer.invoke('save-edited-image', { sourcePath, bytes, ext, mode, suffix }),
   trashImage: (path) => ipcRenderer.invoke('trash-image', path),
   renameImage: (oldPath, newName) => ipcRenderer.invoke('rename-image', { oldPath, newName }),
   setFullscreen: (enable) => ipcRenderer.invoke('set-fullscreen', enable),

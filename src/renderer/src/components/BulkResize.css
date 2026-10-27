@@ -1,0 +1,111 @@
+.br-wrap {
+  position: relative;
+}
+
+.br-menu {
+  position: fixed;
+  width: 240px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 10px 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.br-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.br-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.br-radio {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.br-num {
+  width: 70px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12px;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+}
+.br-num:focus { outline: none; border-color: var(--accent); }
+.br-num:disabled { opacity: 0.4; }
+
+.br-unit {
+  width: 16px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.br-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.br-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+.br-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.br-chip {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.br-chip:hover { color: var(--text); background: var(--bg-hover); }
+.br-chip.active { color: var(--text); border-color: var(--accent); background: var(--accent-dim); }
+
+.br-quality {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.br-quality input { accent-color: var(--accent); }
+
+.br-run {
+  margin-top: 4px;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: #fff;
+  font-size: 12px;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.br-run:hover:not(:disabled) { background: var(--accent-hover); }
+.br-run:disabled { opacity: 0.45; cursor: default; }
