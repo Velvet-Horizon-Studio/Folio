@@ -67,7 +67,7 @@ function rendererThumbnail(path) {
 }
 
 // Individual thumbnail with lazy load, rename, delete, selection, and metadata
-function ThumbnailItem({ img, isActive, isSelected, scrollRef, onJumpTo, onDelete, onRename, onSelect, onContextMenu, onShowMeta, reloadKey }) {
+function ThumbnailItem({ img, isActive, isSelected, scrollRef, onJumpTo, onDelete, onRename, onSelect, onContextMenu, onShowMeta, reloadKey, version }) {
   const [src, setSrc] = useState(null)
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState('')
@@ -99,7 +99,7 @@ function ThumbnailItem({ img, isActive, isSelected, scrollRef, onJumpTo, onDelet
     )
     observer.observe(el)
     return () => observer.disconnect()
-  }, [img.path, reloadKey])
+  }, [img.path, reloadKey, version])
 
   useEffect(() => {
     if (renaming && inputRef.current) {
@@ -196,7 +196,7 @@ const CONVERT_FORMATS = [
 
 
 
-export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDelete, onRename, onMove, onBulkMoved, folders, thumbSize, onThumbSizeChange, reloadKey, onReload }) {
+export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDelete, onRename, onMove, onBulkMoved, onEdit, editVersions, folders, thumbSize, onThumbSizeChange, reloadKey, onReload }) {
   const activeRef = useRef(null)
   const menuRef = useRef(null)
   const [contextMenu, setContextMenu] = useState(null)
@@ -371,6 +371,7 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
                     onContextMenu={(x, y, path) => setContextMenu({ x, y, path })}
                     onShowMeta={handleShowMeta}
                     reloadKey={reloadKey}
+                    version={editVersions?.[img.path]}
                   />
                 ))}
               </div>
@@ -556,6 +557,16 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
             }}
           >
             Copy file
+          </button>
+          <button
+            className="tb-context-item"
+            onClick={() => {
+              const path = contextMenu.path
+              setContextMenu(null)
+              onEdit(path)
+            }}
+          >
+            Resize / Crop…
           </button>
           <div className="tb-context-divider" />
           {CONVERT_FORMATS.map(({ label, format }) => (

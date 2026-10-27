@@ -8,7 +8,7 @@ import './SlideShow.css'
 // start frame (opacity 0) from the very first paint — there is no transition baseline
 // to race, so a new image can never "appear instantly" without fading.
 
-export default function SlideShow({ image, index, total, transition, transitionDuration, isFullscreen, onToggleFullscreen }) {
+export default function SlideShow({ image, version, index, total, transition, transitionDuration, isFullscreen, onToggleFullscreen }) {
   // layers: [{ id, src }] — last entry is the foreground (current) image
   const [layers, setLayers] = useState([])
   const idRef = useRef(0)
@@ -54,7 +54,9 @@ export default function SlideShow({ image, index, total, transition, transitionD
       return
     }
 
-    const src = `file:///${image.path.replace(/\\/g, '/')}`
+    // version changes when the file is overwritten in the editor; the query string
+    // busts Chromium's image cache so the new pixels show
+    const src = `file:///${image.path.replace(/\\/g, '/')}${version ? `?v=${version}` : ''}`
     let cancelled = false
 
     const show = () => {
@@ -85,7 +87,7 @@ export default function SlideShow({ image, index, total, transition, transitionD
     }
 
     return () => { cancelled = true }
-  }, [index, image, transition])
+  }, [index, image, version, transition])
 
   // Once the incoming image finishes animating, drop the backdrop layer beneath it
   function handleAnimationEnd(endedId) {

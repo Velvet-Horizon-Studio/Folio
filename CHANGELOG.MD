@@ -4,6 +4,17 @@ All notable changes to Folio are documented here.
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Resize / Crop editor**: right-click a thumbnail and choose "Resize / Crop…". Drag or draw the crop box, or type exact X/Y/W/H values. Choose an aspect-ratio preset, set the output size in pixels or by percentage, and pick PNG, JPEG or WebP with adjustable quality. **Save as new…** writes a separate file. **Overwrite** replaces the original and moves it to the Recycle Bin first. Stable Diffusion parameters in PNG files are kept.
+- **Thumbnail reload**: a ↻ button in the Browse footer and F5 anywhere in the app clear and regenerate thumbnails.
+
+### Fixed
+- **WebP and other thumbnails**: thumbnails for WebP, AVIF and GIF files (including ones with a misleading `.jpg` extension) no longer stay blank.
+
+---
+
 ## [1.1.2] — 2026-06-29
 
 ### Added

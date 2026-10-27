@@ -32,6 +32,7 @@ src/renderer/src/
   components/ThumbnailBrowser.jsx← Thumbnail grid, context menu, bulk actions
   components/SlideShow.jsx       ← Main image viewer with transitions and zoom/pan
   components/Controls.jsx        ← Playback controls bar
+  components/ImageEditor.jsx     ← Resize / crop modal (canvas encode in renderer, save via IPC)
 ```
 
 ### State in App.jsx
@@ -75,6 +76,7 @@ Two-tier: in-memory `Map` + SHA-1-keyed files in `app.getPath('userData')/thumbn
 | `move-image` | renderer→main | Move single file to another folder |
 | `move-images-bulk` | renderer→main | Move multiple files, return `{ sourcePath, destPath, ok }[]` |
 | `convert-image` | renderer→main | Convert with save dialog |
+| `save-edited-image` | renderer→main | Write Resize/Crop editor output (new file via dialog, or overwrite after trashing the original); copies PNG text chunks |
 | `convert-images-bulk` | renderer→main | Convert in-place, return `{ success, failed }` |
 | `copy-image` | renderer→main | CF_HDROP clipboard via PowerShell |
 | `get-image-metadata` | renderer→main | PNG tEXt chunk parser for SD params |

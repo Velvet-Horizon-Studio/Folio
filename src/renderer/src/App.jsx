@@ -4,6 +4,7 @@ import ThumbnailBrowser from './components/ThumbnailBrowser'
 import SlideShow from './components/SlideShow'
 import Controls from './components/Controls'
 import HelpOverlay from './components/HelpOverlay'
+import ImageEditor from './components/ImageEditor'
 import './styles/App.css'
 
 
@@ -45,6 +46,8 @@ export default function App() {
   const [controlsVisible, setControlsVisible] = useState(true)
   const [helpText, setHelpText] = useState(null)
   const [thumbReloadKey, setThumbReloadKey] = useState(0)
+  const [editPath, setEditPath] = useState(null) // image open in the resize/crop editor
+  const [editVersions, setEditVersions] = useState({}) // path → bump count after an overwrite
   const hideTimerRef = useRef(null)
   const dragCounterRef = useRef(0)
 
@@ -305,6 +308,15 @@ export default function App() {
     return () => document.removeEventListener('keydown', handler)
   }, [handleReloadThumbnails])
 
+  const handleCloseEditor = useCallback(() => setEditPath(null), [])
+
+  // An overwrite keeps the path, so bump its version to refresh the thumbnail and
+  // viewer. A new file is picked up by the folder watcher on its own.
+  const handleEditSaved = useCallback((savedPath, mode) => {
+    if (mode !== 'overwrite') return
+    setEditVersions((v) => ({ ...v, [savedPath]: (v[savedPath] ?? 0) + 1 }))
+  }, [])
+
   const handleJumpTo = useCallback((index) => {
     setIsPlaying(false)
     setCurrentIndex(index)
@@ -510,6 +522,8 @@ export default function App() {
               onRename={handleRenameImage}
               onMove={handleMoveImage}
               onBulkMoved={handleBulkMoved}
+              onEdit={setEditPath}
+              editVersions={editVersions}
               folders={folders}
               thumbSize={thumbSize}
               onThumbSizeChange={setThumbSize}
@@ -523,6 +537,7 @@ export default function App() {
       <main className="main-area">
         <SlideShow
           image={currentImage}
+          version={currentImage ? editVersions[currentImage.path] : undefined}
           index={currentIndex}
           total={images.length}
           transition={transition}
@@ -558,6 +573,10 @@ export default function App() {
           <HelpOverlay text={helpText} onClose={() => setHelpText(null)} />
         )}
       </main>
+
+      {editPath && (
+        <ImageEditor path={editPath} onClose={handleCloseEditor} onSaved={handleEditSaved} />
+      )}
     </div>
   )
 }

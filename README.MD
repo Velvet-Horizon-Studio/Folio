@@ -107,6 +107,18 @@ images speak for themselves.
                  on the Windows clipboard exactly like Ctrl+C in Explorer.
                  Navigate to any folder and paste with Ctrl+V.
 
+    Resize /     Right-click any thumbnail and choose Resize / Crop… to open
+    Crop         the editor. Drag the crop box, its corner and edge handles,
+                 or draw a new box on the image. You can also type exact X, Y,
+                 W and H values. Pick an aspect ratio (Free, Original, 1:1,
+                 4:3, 3:2, 16:9 and their portrait versions) to lock the box.
+                 Set the output size in pixels or with the 25/50/75/100 %
+                 buttons, and choose PNG, JPEG or WebP with a quality slider.
+                 Save as new… writes a separate file, and Overwrite replaces
+                 the original, which goes to the Recycle Bin so the change can
+                 be undone. PNG generation parameters are kept when saving to
+                 PNG.
+
   FOLDER MANAGEMENT
   -----------------
   Drag the ⠿ handle on any folder row in the sidebar to reorder it. The
@@ -139,7 +151,8 @@ images speak for themselves.
     Down Arrow   Zoom out
     Space        Play / pause the slideshow
     Escape       Exit fullscreen — or close the window if not in fullscreen.
-                 Also dismisses an open context menu.
+                 Also dismisses an open context menu and closes the
+                 Resize / Crop editor.
     Enter        Confirm an inline rename
     Escape       Cancel an inline rename
 
@@ -158,7 +171,7 @@ images speak for themselves.
 
     Click thumbnail     Jump to that image in the viewer
     Ctrl-click          Add / remove a thumbnail from the multi-selection
-    Right-click thumb   Open the file menu (Copy, Convert, Move to folder)
+    Right-click thumb   Open the file menu (Copy, Resize / Crop, Convert, Move)
     Right-click folder  Open the folder menu (Move all to)
     Drag ⠿ handle       Reorder folders in the sidebar
     Drag from Explorer  Drop folders onto the window to add them

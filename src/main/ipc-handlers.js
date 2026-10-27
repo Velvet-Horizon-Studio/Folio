@@ -47,6 +47,29 @@ function renameThumbOnDisk(oldPath, newPath) {
 }
 // ────────────────────────────────────────────────────────────────────────────
 
+// Canvas re-encoding drops PNG text chunks, which is where Stable Diffusion keeps its
+// generation parameters. Copy the source's tEXt/iTXt/zTXt chunks into the new PNG,
+// right after IHDR (chunks carry their own CRC, so they can be copied verbatim).
+function copyPngTextChunks(srcBuf, outBuf) {
+  const SIG = 8
+  const isPng = (b) => b.length > SIG && b.toString('hex', 0, 8) === '89504e470d0a1a0a'
+  if (!isPng(srcBuf) || !isPng(outBuf)) return outBuf
+  const textChunks = []
+  let pos = SIG
+  while (pos + 12 <= srcBuf.length) {
+    const len = srcBuf.readUInt32BE(pos)
+    const type = srcBuf.toString('ascii', pos + 4, pos + 8)
+    const end = pos + 12 + len
+    if (end > srcBuf.length) break
+    if (type === 'tEXt' || type === 'iTXt' || type === 'zTXt') textChunks.push(srcBuf.subarray(pos, end))
+    if (type === 'IEND') break
+    pos = end
+  }
+  if (textChunks.length === 0) return outBuf
+  const ihdrEnd = SIG + 12 + outBuf.readUInt32BE(SIG)
+  return Buffer.concat([outBuf.subarray(0, ihdrEnd), ...textChunks, outBuf.subarray(ihdrEnd)])
+}
+
 function scanFolderForImages(folderPath) {
   const images = []
   try {
@@ -157,6 +180,34 @@ export function registerIpcHandlers(win) {
     thumbnailCache.set(path, dataUrl)
     saveThumbToDisk(path, dataUrl)
     return true
+  })
+
+  // Resize/crop editor output. The renderer encodes the result (Chromium canvas);
+  // this writes it either to a new file (save dialog) or over the original, in which
+  // case the original goes to the Recycle Bin first so the overwrite can be undone.
+  ipcMain.handle('save-edited-image', async (_event, { sourcePath, bytes, ext, mode }) => {
+    let out = Buffer.from(bytes)
+    if (ext === 'png') {
+      try { out = copyPngTextChunks(readFileSync(sourcePath), out) } catch {}
+    }
+
+    let targetPath = sourcePath
+    if (mode === 'new') {
+      const stem = basename(sourcePath).replace(/\.[^.]+$/, '')
+      const result = await dialog.showSaveDialog(win, {
+        title: 'Save edited image',
+        defaultPath: join(dirname(sourcePath), `${stem}_edit.${ext}`),
+        filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
+      })
+      if (result.canceled || !result.filePath) return null
+      targetPath = result.filePath
+    }
+
+    if (existsSync(targetPath)) await shell.trashItem(targetPath)
+    writeFileSync(targetPath, out)
+    thumbnailCache.delete(targetPath)
+    deleteThumbFromDisk(targetPath)
+    return targetPath
   })
 
   ipcMain.handle('trash-image', async (_event, path) => {
