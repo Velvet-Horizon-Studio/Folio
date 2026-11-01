@@ -32,10 +32,11 @@ src/renderer/src/
   components/ThumbnailBrowser.jsx← Thumbnail grid, context menu, bulk actions
   components/SlideShow.jsx       ← Main image viewer with transitions and zoom/pan
   components/Controls.jsx        ← Playback controls bar
-  components/ImageEditor.jsx     ← Resize / crop modal (canvas encode in renderer, save via IPC)
+  components/ImageEditor.jsx     ← Edit modal: Crop & Resize and Adjust tabs (encode in renderer, save via IPC)
   components/BulkResize.jsx      ← Bulk-bar "Resize…" popover; runs resizes through the worker pool
   thumbnails.js                  ← Worker pool + scheduling: requestThumbnail(), resizeImage()
   imageWorker.js                 ← Web Worker: decode → resize → encode (thumb and bulk resize ops)
+  adjust.js                      ← Adjustment sliders/presets + WebGL2 renderer + guided-filter luminance maps
 ```
 
 ### State in App.jsx
@@ -71,6 +72,10 @@ Generation happens in the renderer (`src/renderer/src/thumbnails.js`). A pool of
 Scheduling: thumbnail misses go into a LIFO queue (the newest request is what just scrolled into view). `ThumbnailItem` keeps its IntersectionObserver connected and cancels its request when it leaves the viewport (+200 px), so queued thumbnails that were scrolled past are dropped. Bulk resize jobs use a separate FIFO queue, at most 3 at a time, and only run when no thumbnail is waiting.
 
 Cache files are renamed on rename and move (size and mtime are unchanged), deleted on trash and editor overwrite, and wiped by `clear-thumbnail-cache` (F5).
+
+### Image adjustments
+
+`adjust.js` renders every Adjust slider in one WebGL2 fragment shader. The editor's live preview renders a copy of the image at its on-screen pixel size into a `<canvas>`; saving renders the crop at full resolution into an `OffscreenCanvas`, which then goes through the same `renderOutput` downscale and encode as plain crops (neutral adjustments skip WebGL entirely). HDR and Clarity need local brightness: `luminanceMaps()` runs a self-guided filter on a ≤512 px luminance copy on the CPU, once per image, and uploads its `(a, b)` coefficients as RG16F textures; the shader evaluates `a·L + b` per pixel, which keeps edges halo-free at full resolution. The maps come from the same small copy for preview and export, so the two match. The editor decodes with `premultiplyAlpha: 'none'` so soft alpha edges keep exact colors. React StrictMode mounts effects twice in dev, so the preview renderer's cleanup deletes GL resources but never loses the canvas's context.
 
 ### IPC channels
 

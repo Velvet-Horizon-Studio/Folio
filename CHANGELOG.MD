@@ -4,6 +4,13 @@ All notable changes to Folio are documented here.
 
 ---
 
+## [1.1.4] — 2026-11-01
+
+### Added
+- **Adjustments**: the image editor (now "Edit / Adjust…" in the thumbnail menu) has a new Adjust tab with Exposure, Contrast, Highlights, Shadows, Whites, Blacks, Temperature, Tint, Vibrance, Saturation, HDR, Clarity, Sharpen, Vignette, Fade, Sepia and Grain sliders, plus presets (Vivid, HDR, Dramatic, B&W, Sepia, Warm, Cool, Matte, Film). The preview updates live on the GPU, "Hold to compare" shows the original, and double-clicking a slider resets it. HDR and Clarity use an edge-preserving filter, so they add local contrast without halos around edges. Adjustments are rendered at full resolution when saving, combined with any crop and resize, and work with Save as new and Overwrite. Transparency and PNG generation parameters are kept.
+
+---
+
 ## [1.1.3] — 2026-10-27
 
 ### Added

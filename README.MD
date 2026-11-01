@@ -107,8 +107,11 @@ images speak for themselves.
                  on the Windows clipboard exactly like Ctrl+C in Explorer.
                  Navigate to any folder and paste with Ctrl+V.
 
-    Resize /     Right-click any thumbnail and choose Resize / Crop… to open
-    Crop         the editor. Drag the crop box, its corner and edge handles,
+    Edit /       Right-click any thumbnail and choose Edit / Adjust… to open
+    Adjust       the editor. It has two tabs, Crop & Resize and Adjust; the
+                 save options at the bottom apply to both.
+
+                 Crop & Resize: drag the crop box, its corner and edge handles,
                  or draw a new box on the image. You can also type exact X, Y,
                  W and H values. Pick an aspect ratio (Free, Original, 1:1,
                  4:3, 3:2, 16:9 and their portrait versions) to lock the box.
@@ -118,6 +121,15 @@ images speak for themselves.
                  the original, which goes to the Recycle Bin so the change can
                  be undone. PNG generation parameters are kept when saving to
                  PNG.
+
+                 Adjust: sliders for Exposure, Contrast, Highlights, Shadows,
+                 Whites, Blacks, Temperature, Tint, Vibrance, Saturation, HDR,
+                 Clarity, Sharpen, Vignette, Fade, Sepia and Grain, with a live
+                 preview. Presets (Vivid, HDR, Dramatic, B&W, Sepia, Warm,
+                 Cool, Matte, Film) set the sliders as a starting point.
+                 Double-click a slider to reset it, and hold Hold to compare
+                 to see the original. Adjustments are applied at full
+                 resolution when you save, together with any crop and resize.
 
     Bulk resize  Select several thumbnails (Ctrl-click) and use the Resize…
                  button in the bulk action bar. Scale them by a percentage or
@@ -160,7 +172,7 @@ images speak for themselves.
     Space        Play / pause the slideshow
     Escape       Exit fullscreen — or close the window if not in fullscreen.
                  Also dismisses an open context menu and closes the
-                 Resize / Crop editor.
+                 image editor.
     Enter        Confirm an inline rename
     Escape       Cancel an inline rename
 
@@ -179,7 +191,7 @@ images speak for themselves.
 
     Click thumbnail     Jump to that image in the viewer
     Ctrl-click          Add / remove a thumbnail from the multi-selection
-    Right-click thumb   Open the file menu (Copy, Resize / Crop, Convert, Move)
+    Right-click thumb   Open the file menu (Copy, Edit / Adjust, Convert, Move)
     Right-click folder  Open the folder menu (Move all to)
     Drag ⠿ handle       Reorder folders in the sidebar
     Drag from Explorer  Drop folders onto the window to add them

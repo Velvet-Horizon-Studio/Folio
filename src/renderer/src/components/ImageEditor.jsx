@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useLayoutEffect } from 'react'
+import { ADJUSTMENTS, NEUTRAL, PRESETS, isNeutral, luminanceMaps, createAdjustRenderer } from '../adjust'
 import './ImageEditor.css'
 
 const ASPECTS = [
@@ -154,10 +155,39 @@ function NumField({ label, value, min, max, onChange }) {
   )
 }
 
+// Adjustment slider; double-click resets it to 0
+function Slider({ item, value, onChange }) {
+  const pct = (v) => ((v - item.min) / (item.max - item.min)) * 100
+  return (
+    <label className={`ie-slider${value ? ' changed' : ''}`} onDoubleClick={() => onChange(0)} title="Double-click to reset">
+      <span className="ie-slider-head">
+        <span>{item.label}</span>
+        <span className="ie-slider-value">{item.format ? item.format(value) : value > 0 && item.min < 0 ? `+${value}` : value}</span>
+      </span>
+      <input
+        type="range"
+        min={item.min}
+        max={item.max}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        // The track fills from 0, so the direction of a change reads at a glance
+        style={{ '--from': `${Math.min(pct(0), pct(value))}%`, '--to': `${Math.max(pct(0), pct(value))}%` }}
+      />
+    </label>
+  )
+}
+
 export default function ImageEditor({ path, onClose, onSaved }) {
   const [bitmap, setBitmap] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
+  const [maps, setMaps] = useState(null)
   const [error, setError] = useState(null)
+  const [tab, setTab] = useState('crop') // 'crop' | 'adjust'
+  const [adjust, setAdjust] = useState(NEUTRAL)
+  const [preset, setPreset] = useState('None')
+  const [compare, setCompare] = useState(false)
+  const [glError, setGlError] = useState(null)
+  const [previewSrc, setPreviewSrc] = useState(null)
   const [crop, setCrop] = useState(null)
   const [aspect, setAspect] = useState('free')
   const [out, setOut] = useState({ w: 0, h: 0 })
@@ -169,9 +199,10 @@ export default function ImageEditor({ path, onClose, onSaved }) {
   const [saving, setSaving] = useState(false)
   const [stage, setStage] = useState({ w: 0, h: 0 })
   const stageRef = useRef(null)
-  const imgRef = useRef(null)
+  const imgRef = useRef(null) // the preview: the WebGL canvas, or an <img> without WebGL
   const canvasRef = useRef(null)
   const dragRef = useRef(null)
+  const rendererRef = useRef(null)
 
   const W = bitmap?.width ?? 0
   const H = bitmap?.height ?? 0
@@ -187,9 +218,11 @@ export default function ImageEditor({ path, onClose, onSaved }) {
         const bytes = await window.electronAPI.readImageBytes(path)
         if (!bytes) throw new Error('Could not read the file.')
         const blob = new Blob([bytes])
-        const bm = await createImageBitmap(blob)
+        // Straight (not premultiplied) alpha, so WebGL gets exact colors at soft edges
+        const bm = await createImageBitmap(blob, { premultiplyAlpha: 'none' })
         if (cancelled) { bm.close(); return }
         url = URL.createObjectURL(blob)
+        setMaps(luminanceMaps(bm))
         setBitmap(bm)
         setPreviewUrl(url)
         setCrop({ x: 0, y: 0, w: bm.width, h: bm.height })
@@ -238,6 +271,52 @@ export default function ImageEditor({ path, onClose, onSaved }) {
   }, [crop, outTouched, lockOut])
 
   const scale = W && stage.w ? Math.min(stage.w / W, stage.h / H, 1) : 0
+
+  // The live preview renders a copy of the image at its on-screen pixel size
+  const dpr = window.devicePixelRatio || 1
+  const pw = Math.min(W, Math.max(1, Math.round(W * scale * dpr)))
+  const ph = Math.min(H, Math.max(1, Math.round(H * scale * dpr)))
+  useEffect(() => {
+    if (!bitmap || !scale) return
+    // Rebuilt after a window resize settles; the first one is immediate
+    const t = setTimeout(() => {
+      setPreviewSrc(pw === W && ph === H ? bitmap : renderOutput(bitmap, { x: 0, y: 0, w: W, h: H }, pw, ph, false))
+    }, previewSrc ? 150 : 0)
+    return () => clearTimeout(t)
+  }, [bitmap, pw, ph]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // WebGL renderer on the preview canvas, fed the preview copy
+  useEffect(() => {
+    const canvas = canvasRef.current?.querySelector('canvas')
+    if (!canvas || !maps || !previewSrc || glError) return
+    try {
+      let r = rendererRef.current
+      if (!r || r.canvas !== canvas) {
+        r?.dispose()
+        r = createAdjustRenderer(canvas, maps)
+        rendererRef.current = r
+      }
+      canvas.width = previewSrc.width
+      canvas.height = previewSrc.height
+      r.setImage(previewSrc, { w: W, h: H })
+    } catch (err) {
+      rendererRef.current = null
+      setGlError(err?.message || String(err))
+      setTab('crop')
+    }
+  }, [maps, previewSrc, glError]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => () => {
+    rendererRef.current?.dispose()
+    rendererRef.current = null
+  }, [])
+
+  // Redraw on every change; the vignette follows the crop
+  useEffect(() => {
+    const r = rendererRef.current
+    if (!r || !crop || !previewSrc) return
+    r.render(compare ? NEUTRAL : adjust, { x: 0, y: 0, w: 1, h: 1 }, { x: crop.x / W, y: crop.y / H, w: crop.w / W, h: crop.h / H })
+  }, [adjust, compare, crop, previewSrc, maps, glError]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function toImageCoords(e) {
     const rect = imgRef.current.getBoundingClientRect()
@@ -326,6 +405,22 @@ export default function ImageEditor({ path, onClose, onSaved }) {
     setOut({ w: W, h: H })
     setOutTouched(false)
     setLockOut(true)
+    resetAdjust()
+  }
+
+  function setAdjustValue(key, v) {
+    setAdjust((a) => ({ ...a, [key]: v }))
+    setPreset(null)
+  }
+
+  function applyPreset(p) {
+    setAdjust({ ...NEUTRAL, ...p.values })
+    setPreset(p.label)
+  }
+
+  function resetAdjust() {
+    setAdjust(NEUTRAL)
+    setPreset('None')
   }
 
   async function handleSave(mode) {
@@ -334,9 +429,21 @@ export default function ImageEditor({ path, onClose, onSaved }) {
       `Overwrite "${basename(path)}"?\n\nThe original will be moved to the Recycle Bin.`
     )) return
     setSaving(true)
+    let exportRenderer = null
     try {
       const fmt = FORMATS.find((f) => f.value === format)
-      const canvas = renderOutput(bitmap, crop, out.w, out.h, format === 'jpeg')
+      // Adjustments render the crop at full resolution first; the resize follows
+      let source = bitmap, region = crop
+      if (!isNeutral(adjust)) {
+        const full = new OffscreenCanvas(crop.w, crop.h)
+        exportRenderer = createAdjustRenderer(full, maps)
+        exportRenderer.setImage(bitmap, { w: W, h: H })
+        const uv = { x: crop.x / W, y: crop.y / H, w: crop.w / W, h: crop.h / H }
+        exportRenderer.render(adjust, uv, uv)
+        source = full
+        region = { x: 0, y: 0, w: crop.w, h: crop.h }
+      }
+      const canvas = renderOutput(source, region, out.w, out.h, format === 'jpeg')
       const blob = await canvas.convertToBlob({
         type: fmt.mime,
         quality: format === 'png' ? undefined : quality / 100,
@@ -350,19 +457,22 @@ export default function ImageEditor({ path, onClose, onSaved }) {
     } catch (err) {
       alert(`Could not save the image:\n${err?.message || err}`)
     } finally {
+      exportRenderer?.dispose(true)
       setSaving(false)
     }
   }
 
   const canOverwrite = fileFormat !== null && format === fileFormat
   const isFullImage = crop && crop.x === 0 && crop.y === 0 && crop.w === W && crop.h === H
-  const unchanged = isFullImage && out.w === W && out.h === H
+  const adjusted = !isNeutral(adjust)
+  const unchanged = isFullImage && out.w === W && out.h === H && !adjusted
+  const cropTab = tab === 'crop'
 
   return (
     <div className="ie-backdrop">
       <div className="ie-window">
         <div className="ie-header">
-          <span className="ie-title" title={path}>Resize / Crop — {basename(path)}</span>
+          <span className="ie-title" title={path}>Edit — {basename(path)}</span>
           <button className="ie-close" onClick={onClose} title="Close (Esc)">✕</button>
         </div>
 
@@ -373,14 +483,17 @@ export default function ImageEditor({ path, onClose, onSaved }) {
             {bitmap && previewUrl && scale > 0 && crop && (
               <div
                 ref={canvasRef}
-                className="ie-canvas"
+                className={`ie-canvas${cropTab ? '' : ' ie-canvas-adjust'}`}
                 style={{ width: W * scale, height: H * scale }}
-                onPointerDown={(e) => startDrag(e, 'new')}
+                // The crop box is only edited on the Crop tab
+                onPointerDown={(e) => cropTab && startDrag(e, 'new')}
                 onPointerMove={onPointerMove}
                 onPointerUp={endDrag}
                 onPointerCancel={endDrag}
               >
-                <img ref={imgRef} src={previewUrl} alt="" draggable={false} />
+                {glError
+                  ? <img ref={imgRef} src={previewUrl} alt="" draggable={false} />
+                  : <canvas ref={imgRef} />}
                 {/* Four panels dim everything outside the crop */}
                 <div className="ie-shade" style={{ left: 0, top: 0, right: 0, height: crop.y * scale }} />
                 <div className="ie-shade" style={{ left: 0, right: 0, top: (crop.y + crop.h) * scale, bottom: 0 }} />
@@ -395,7 +508,7 @@ export default function ImageEditor({ path, onClose, onSaved }) {
                     height: crop.h * scale,
                   }}
                   // A full-image crop can't move, so dragging inside it draws a new box instead
-                  onPointerDown={(e) => startDrag(e, isFullImage ? 'new' : 'move')}
+                  onPointerDown={(e) => cropTab && startDrag(e, isFullImage ? 'new' : 'move')}
                 >
                   <div className="ie-grid" />
                   {HANDLES.map((h) => (
@@ -411,94 +524,143 @@ export default function ImageEditor({ path, onClose, onSaved }) {
           </div>
 
           <div className="ie-panel">
-            <div className="ie-section-title">Crop</div>
-            <div className="ie-aspects">
-              {ASPECTS.map((a) => (
-                <button
-                  key={a.label}
-                  className={`ie-chip${aspect === a.value ? ' active' : ''}`}
-                  onClick={() => handleAspect(a.value)}
-                  disabled={!bitmap}
-                >
-                  {a.label}
-                </button>
-              ))}
+            <div className="ie-tabs">
+              <button className={`ie-tab${cropTab ? ' active' : ''}`} onClick={() => setTab('crop')}>Crop &amp; Resize</button>
+              <button className={`ie-tab${!cropTab ? ' active' : ''}`} onClick={() => setTab('adjust')} disabled={!!glError} title={glError || undefined}>
+                Adjust{adjusted ? ' •' : ''}
+              </button>
             </div>
-            {crop && (
-              <div className="ie-grid2">
-                <NumField label="X" value={crop.x} min={0} max={W - crop.w} onChange={(v) => setCropField('x', v)} />
-                <NumField label="Y" value={crop.y} min={0} max={H - crop.h} onChange={(v) => setCropField('y', v)} />
-                <NumField label="W" value={crop.w} min={1} max={W - crop.x} onChange={(v) => setCropField('w', v)} />
-                <NumField label="H" value={crop.h} min={1} max={H - crop.y} onChange={(v) => setCropField('h', v)} />
-              </div>
-            )}
 
-            <div className="ie-section-title">Resize</div>
-            {crop && (
-              <>
-                <div className="ie-grid2">
-                  <NumField label="W" value={out.w} min={1} max={20000} onChange={(v) => setOutField('w', v)} />
-                  <NumField label="H" value={out.h} min={1} max={20000} onChange={(v) => setOutField('h', v)} />
-                </div>
-                <label className="ie-check">
-                  <input type="checkbox" checked={lockOut} onChange={(e) => setLockOut(e.target.checked)} />
-                  Keep proportions
-                </label>
-                <div className="ie-aspects">
-                  {[25, 50, 75, 100].map((pct) => (
-                    <button key={pct} className="ie-chip" onClick={() => setOutPercent(pct)}>{pct}%</button>
+            <div className="ie-panel-scroll">
+              {cropTab ? (
+                <>
+                  <div className="ie-section-title">Crop</div>
+                  <div className="ie-aspects">
+                    {ASPECTS.map((a) => (
+                      <button
+                        key={a.label}
+                        className={`ie-chip${aspect === a.value ? ' active' : ''}`}
+                        onClick={() => handleAspect(a.value)}
+                        disabled={!bitmap}
+                      >
+                        {a.label}
+                      </button>
+                    ))}
+                  </div>
+                  {crop && (
+                    <div className="ie-grid2">
+                      <NumField label="X" value={crop.x} min={0} max={W - crop.w} onChange={(v) => setCropField('x', v)} />
+                      <NumField label="Y" value={crop.y} min={0} max={H - crop.h} onChange={(v) => setCropField('y', v)} />
+                      <NumField label="W" value={crop.w} min={1} max={W - crop.x} onChange={(v) => setCropField('w', v)} />
+                      <NumField label="H" value={crop.h} min={1} max={H - crop.y} onChange={(v) => setCropField('h', v)} />
+                    </div>
+                  )}
+
+                  <div className="ie-section-title">Resize</div>
+                  {crop && (
+                    <>
+                      <div className="ie-grid2">
+                        <NumField label="W" value={out.w} min={1} max={20000} onChange={(v) => setOutField('w', v)} />
+                        <NumField label="H" value={out.h} min={1} max={20000} onChange={(v) => setOutField('h', v)} />
+                      </div>
+                      <label className="ie-check">
+                        <input type="checkbox" checked={lockOut} onChange={(e) => setLockOut(e.target.checked)} />
+                        Keep proportions
+                      </label>
+                      <div className="ie-aspects">
+                        {[25, 50, 75, 100].map((pct) => (
+                          <button key={pct} className="ie-chip" onClick={() => setOutPercent(pct)}>{pct}%</button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="ie-adjust-bar">
+                    <button
+                      className="ie-chip"
+                      onPointerDown={() => setCompare(true)}
+                      onPointerUp={() => setCompare(false)}
+                      onPointerLeave={() => setCompare(false)}
+                      disabled={!adjusted}
+                      title="Show the original while held"
+                    >
+                      Hold to compare
+                    </button>
+                    <button className="ie-chip" onClick={resetAdjust} disabled={!adjusted}>Reset adjustments</button>
+                  </div>
+
+                  <div className="ie-section-title">Presets</div>
+                  <div className="ie-aspects">
+                    {PRESETS.map((p) => (
+                      <button key={p.label} className={`ie-chip${preset === p.label ? ' active' : ''}`} onClick={() => applyPreset(p)}>
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {ADJUSTMENTS.map((g) => (
+                    <div key={g.group} className="ie-adjust-group">
+                      <div className="ie-section-title">{g.group}</div>
+                      {g.items.map((item) => (
+                        <Slider key={item.key} item={item} value={adjust[item.key]} onChange={(v) => setAdjustValue(item.key, v)} />
+                      ))}
+                    </div>
                   ))}
-                </div>
-              </>
-            )}
+                </>
+              )}
 
-            <div className="ie-section-title">Format</div>
-            <div className="ie-aspects">
-              {FORMATS.map((f) => (
+              <div className="ie-section-title">Format</div>
+              <div className="ie-aspects">
+                {FORMATS.map((f) => (
+                  <button
+                    key={f.value}
+                    className={`ie-chip${format === f.value ? ' active' : ''}`}
+                    onClick={() => setFormat(f.value)}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              {format !== 'png' && (
+                <label className="ie-quality">
+                  <span>Quality {quality}</span>
+                  <input type="range" min={50} max={100} value={quality} onChange={(e) => setQuality(Number(e.target.value))} />
+                </label>
+              )}
+              {format === 'png' && fileFormat === 'png' && (
+                <div className="ie-note">PNG text metadata (e.g. generation parameters) is kept.</div>
+              )}
+            </div>
+
+            <div className="ie-panel-footer">
+              <div className="ie-summary">
+                {bitmap && <>Original {W} × {H}<br />Output <strong>{out.w} × {out.h}</strong> {format.toUpperCase()}{adjusted ? ', adjusted' : ''}</>}
+              </div>
+
+              <div className="ie-actions">
+                <button className="ie-btn" onClick={handleReset} disabled={!bitmap || saving}>Reset</button>
+                <button className="ie-btn" onClick={onClose} disabled={saving}>Cancel</button>
                 <button
-                  key={f.value}
-                  className={`ie-chip${format === f.value ? ' active' : ''}`}
-                  onClick={() => setFormat(f.value)}
+                  className="ie-btn ie-btn-primary"
+                  onClick={() => handleSave('new')}
+                  disabled={!bitmap || saving}
+                  title="Save to a new file"
                 >
-                  {f.label}
+                  Save as new…
                 </button>
-              ))}
-            </div>
-            {format !== 'png' && (
-              <label className="ie-quality">
-                <span>Quality {quality}</span>
-                <input type="range" min={50} max={100} value={quality} onChange={(e) => setQuality(Number(e.target.value))} />
-              </label>
-            )}
-            {format === 'png' && fileFormat === 'png' && (
-              <div className="ie-note">PNG text metadata (e.g. generation parameters) is kept.</div>
-            )}
-
-            <div className="ie-summary">
-              {bitmap && <>Original {W} × {H}<br />Output <strong>{out.w} × {out.h}</strong> {format.toUpperCase()}</>}
-            </div>
-
-            <div className="ie-actions">
-              <button className="ie-btn" onClick={handleReset} disabled={!bitmap || saving}>Reset</button>
-              <button className="ie-btn" onClick={onClose} disabled={saving}>Cancel</button>
-              <button
-                className="ie-btn ie-btn-primary"
-                onClick={() => handleSave('new')}
-                disabled={!bitmap || saving}
-                title="Save to a new file"
-              >
-                Save as new…
-              </button>
-              <button
-                className="ie-btn ie-btn-danger"
-                onClick={() => handleSave('overwrite')}
-                disabled={!bitmap || saving || !canOverwrite || unchanged}
-                title={canOverwrite
-                  ? 'Replace the original (it goes to the Recycle Bin)'
-                  : `Overwrite keeps the file's own format — pick ${fileFormat ? fileFormat.toUpperCase() : 'PNG, JPEG or WebP'} or use Save as new`}
-              >
-                Overwrite
-              </button>
+                <button
+                  className="ie-btn ie-btn-danger"
+                  onClick={() => handleSave('overwrite')}
+                  disabled={!bitmap || saving || !canOverwrite || unchanged}
+                  title={canOverwrite
+                    ? 'Replace the original (it goes to the Recycle Bin)'
+                    : `Overwrite keeps the file's own format — pick ${fileFormat ? fileFormat.toUpperCase() : 'PNG, JPEG or WebP'} or use Save as new`}
+                >
+                  Overwrite
+                </button>
+              </div>
             </div>
           </div>
         </div>

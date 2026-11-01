@@ -538,7 +538,7 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
               onEdit(path)
             }}
           >
-            Resize / Crop…
+            Edit / Adjust…
           </button>
           <div className="tb-context-divider" />
           {CONVERT_FORMATS.map(({ label, format }) => (
