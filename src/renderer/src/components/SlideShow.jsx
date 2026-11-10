@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { fileUrl } from '../platform'
 import './SlideShow.css'
 
 // Crossfade model: each image is rendered as its own absolutely-positioned layer.
@@ -56,7 +57,7 @@ export default function SlideShow({ image, version, index, total, transition, tr
 
     // version changes when the file is overwritten in the editor; the query string
     // busts Chromium's image cache so the new pixels show
-    const src = `file:///${image.path.replace(/\\/g, '/')}${version ? `?v=${version}` : ''}`
+    const src = `${fileUrl(image.path)}${version ? `?v=${version}` : ''}`
     let cancelled = false
 
     const show = () => {

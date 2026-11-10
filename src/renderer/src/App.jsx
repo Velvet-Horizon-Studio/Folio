@@ -407,26 +407,22 @@ export default function App() {
   }, [isFullscreen])
 
   const handleDragEnter = useCallback((e) => {
-    if (e.dataTransfer.types.includes('application/x-folio-reorder')) return
     e.preventDefault()
     dragCounterRef.current++
     if (dragCounterRef.current === 1) setIsDragging(true)
   }, [])
 
   const handleDragLeave = useCallback((e) => {
-    if (e.dataTransfer.types.includes('application/x-folio-reorder')) return
     e.preventDefault()
     dragCounterRef.current--
     if (dragCounterRef.current === 0) setIsDragging(false)
   }, [])
 
   const handleDragOver = useCallback((e) => {
-    if (e.dataTransfer.types.includes('application/x-folio-reorder')) return
     e.preventDefault()
   }, [])
 
   const handleDrop = useCallback((e) => {
-    if (e.dataTransfer.types.includes('application/x-folio-reorder')) return
     e.preventDefault()
     dragCounterRef.current = 0
     setIsDragging(false)
@@ -438,14 +434,25 @@ export default function App() {
         if (file && file.path) newPaths.push(file.path)
       }
     }
-    if (newPaths.length > 0) {
-      setFolders((prev) => {
-        const existing = new Set(prev.map((f) => f.path))
-        const toAdd = newPaths.filter((p) => !existing.has(p)).map((p) => ({ path: p, active: true }))
-        return [...prev, ...toAdd]
-      })
-    }
+    addFolders(newPaths)
   }, [])
+
+  const addFolders = useCallback((newPaths) => {
+    if (newPaths.length === 0) return
+    setFolders((prev) => {
+      const existing = new Set(prev.map((f) => f.path))
+      const toAdd = newPaths.filter((p) => !existing.has(p)).map((p) => ({ path: p, active: true }))
+      return [...prev, ...toAdd]
+    })
+  }, [])
+
+  // Under Tauri, Explorer drops arrive as native window events (with real paths)
+  // instead of HTML5 drop events
+  useEffect(() => window.electronAPI.onFolderDrag?.((e) => {
+    if (e.type === 'enter') setIsDragging(true)
+    else if (e.type === 'leave') { dragCounterRef.current = 0; setIsDragging(false) }
+    else if (e.type === 'drop') addFolders(e.folders)
+  }), [addFolders])
 
   const currentImage = images[currentIndex] || null
 

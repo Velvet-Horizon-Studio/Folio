@@ -6,9 +6,29 @@
 npm run dev        # Start in development mode (Vite hot-reload for renderer; restart required for main/preload)
 npm run build      # Production build (electron-vite build → out/)
 npm run package    # Build + package as Windows portable .exe (dist/Folio-portable.exe)
+
+# Tauri (Rust) build — same renderer, Rust backend in src-tauri/
+npm run tauri:dev    # Dev mode (Vite on :1420 + debug Rust build)
+npm run tauri:build  # Release exe, no installer → src-tauri/target/release/folio.exe
 ```
 
 > **Important:** Changes to `src/main/` or `src/preload/` are **not** hot-reloaded. Stop and restart `npm run dev` after editing those files.
+
+---
+
+## Tauri build (branch `tauri-port`)
+
+The renderer is shared by two backends. Electron's preload sets `window.electronAPI`; under Tauri, `src/renderer/src/tauriBridge.js` (imported first in `main.jsx`) sets the same object on top of Rust commands, so components never check which backend they run on. The only backend-specific renderer code:
+
+- `platform.js` `fileUrl(path)`: `file://` in Electron, the asset protocol (`http://asset.localhost/…`) in Tauri. Use it for every local image `src`.
+- Explorer folder drops: Electron reads `File.path` from HTML5 drop events; Tauri's webview gets no paths, so the bridge's `onFolderDrag` reports native drag-drop events and App adds the folders. Tauri's native drop handling disables HTML5 drag and drop in the webview on Windows, which is why folder reordering uses pointer events.
+- `window.close()` and the browser context menu are patched by the bridge.
+
+`src-tauri/src/main.rs` ports every IPC handler (command names are the snake_case channel names). `thumbs.rs` is the cache (same file naming as Electron, including JS-formatted `mtimeMs`, so both builds share one cache), `png.rs` the text-chunk copy and SD parsing, `watch.rs` the debounced folder watcher (`notify`). Large byte payloads (`save_thumbnail`, `save_edited_image`) are sent as raw request bodies with arguments in percent-encoded `x-*` headers; `read_image_bytes` returns a raw `Response`. Dialogs run off the main thread (`spawn_blocking` + `blocking_*`).
+
+Data lives in `%APPDATA%\Folio` (the Electron userData folder), so config and thumbnails carry over between builds. Test-only env vars: `FOLIO_DATA_DIR` (data folder) and `FOLIO_TEST_SAVE_DIR` (answers save dialogs without showing them). WebView2 exposes CDP with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=N` for automated tests.
+
+Differences from Electron: `convert-image(s)` decodes with the `image` crate (adds WebP, GIF, TIFF input; AVIF and SVG still fail, as they do in Electron), metadata dimensions come from `imagesize` (header only, works for WebP/AVIF), clipboard copy uses the Win32 API instead of PowerShell, and keep-awake uses a power request (`keepawake`).
 
 ---
 

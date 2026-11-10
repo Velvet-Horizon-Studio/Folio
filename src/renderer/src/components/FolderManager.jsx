@@ -6,7 +6,8 @@ function basename(path) {
 }
 
 export default function FolderManager({ folders, onAdd, onRemove, onToggle, onReorder, onMoveFolder, imageCount, loading, startupBehavior, onStartupBehaviorChange }) {
-  const dragIndexRef = useRef(null)
+  const dragRef = useRef(null) // { index, startY, active } while a row is held
+  const listRef = useRef(null)
   const [dragState, setDragState] = useState({ dragging: null, over: null })
   const [contextMenu, setContextMenu] = useState(null) // { x, y, path, submenuOpen }
   const menuRef = useRef(null)
@@ -26,34 +27,45 @@ export default function FolderManager({ folders, onAdd, onRemove, onToggle, onRe
     }
   }, [contextMenu])
 
-  function handleDragStart(e, index) {
-    dragIndexRef.current = index
-    e.dataTransfer.setData('application/x-folio-reorder', '1')
-    e.dataTransfer.effectAllowed = 'move'
-    setDragState({ dragging: index, over: index })
+  // Reordering uses pointer events rather than HTML5 drag and drop, which the Tauri
+  // build gives up to native Explorer drops on Windows
+
+  // Row under a vertical position, clamped to the list
+  function rowIndexAt(y) {
+    const rows = listRef.current.querySelectorAll('.fm-folder-item')
+    for (let i = 0; i < rows.length; i++) {
+      if (y < rows[i].getBoundingClientRect().bottom) return i
+    }
+    return rows.length - 1
   }
 
-  function handleDragEnterRow(e, index) {
-    e.preventDefault()
-    setDragState(s => ({ ...s, over: index }))
+  function handlePointerDown(e, index) {
+    if (e.button !== 0 || e.target.closest('button, label, input')) return
+    dragRef.current = { index, startY: e.clientY, active: false }
+    e.currentTarget.setPointerCapture(e.pointerId)
   }
 
-  function handleDragOverRow(e) {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
+  function handlePointerMove(e) {
+    const d = dragRef.current
+    if (!d) return
+    if (!d.active) {
+      if (Math.abs(e.clientY - d.startY) < 4) return // a click, not a drag
+      d.active = true
+    }
+    setDragState({ dragging: d.index, over: rowIndexAt(e.clientY) })
   }
 
-  function handleDropRow(e, index) {
-    e.preventDefault()
-    e.stopPropagation()
-    const from = dragIndexRef.current
-    dragIndexRef.current = null
+  function handlePointerUp(e) {
+    const d = dragRef.current
+    dragRef.current = null
+    if (!d?.active) return
     setDragState({ dragging: null, over: null })
-    if (from !== null && from !== index) onReorder(from, index)
+    const to = rowIndexAt(e.clientY)
+    if (to !== d.index) onReorder(d.index, to)
   }
 
-  function handleDragEnd() {
-    dragIndexRef.current = null
+  function handlePointerCancel() {
+    dragRef.current = null
     setDragState({ dragging: null, over: null })
   }
 
@@ -66,7 +78,7 @@ export default function FolderManager({ folders, onAdd, onRemove, onToggle, onRe
         )}
       </div>
 
-      <div className="fm-folder-list">
+      <div className="fm-folder-list" ref={listRef}>
         {folders.length === 0 && (
           <div className="fm-empty">No folders added yet.<br />Click below to add one.</div>
         )}
@@ -80,12 +92,10 @@ export default function FolderManager({ folders, onAdd, onRemove, onToggle, onRe
               dragState.over === index && dragState.dragging !== index ? 'fm-folder-drag-over' : '',
             ].filter(Boolean).join(' ')}
             title={path}
-            draggable
-            onDragStart={(e) => handleDragStart(e, index)}
-            onDragEnter={(e) => handleDragEnterRow(e, index)}
-            onDragOver={handleDragOverRow}
-            onDrop={(e) => handleDropRow(e, index)}
-            onDragEnd={handleDragEnd}
+            onPointerDown={(e) => handlePointerDown(e, index)}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
             onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, path, submenuOpen: false }) }}
           >
             <span className="fm-drag-handle" title="Drag to reorder">⠿</span>

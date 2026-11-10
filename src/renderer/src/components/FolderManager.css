@@ -281,3 +281,6 @@
   box-shadow: 0 6px 20px rgba(0,0,0,0.5);
   z-index: 1001;
 }
+
+/* Rows are reordered by dragging (pointer events); keep the drag from selecting text */
+.fm-folder-item { user-select: none; touch-action: none; }

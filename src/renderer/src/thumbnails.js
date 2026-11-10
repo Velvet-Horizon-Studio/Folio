@@ -1,7 +1,8 @@
-// Image work off the UI thread. Thumbnail cache hits come back from the main process
-// as file:// URLs; misses (and bulk resizes) are decoded and re-encoded in a pool of
-// Web Workers, then written to disk by the main process.
+// Image work off the UI thread. Thumbnail cache hits come back from the backend as
+// loadable URLs; misses (and bulk resizes) are decoded and re-encoded in a pool of
+// Web Workers, then written to disk by the backend.
 import ImageWorker from './imageWorker.js?worker&inline'
+import { fileUrl } from './platform'
 
 // Shortest side in px. Covers the largest grid size (200px) at 150% display scaling.
 const THUMB_SIZE = 320
@@ -125,7 +126,7 @@ export function requestThumbnail(path, onReady) {
   // SVGs are vectors (and can't be decoded in a worker): show the file itself
   if (/\.svg$/i.test(path)) {
     let cancelled = false
-    queueMicrotask(() => { if (!cancelled) onReady(`file:///${path.replace(/\\/g, '/')}`) })
+    queueMicrotask(() => { if (!cancelled) onReady(fileUrl(path)) })
     return () => { cancelled = true }
   }
   let req = requests.get(path)
