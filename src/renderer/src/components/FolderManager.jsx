@@ -27,8 +27,8 @@ export default function FolderManager({ folders, onAdd, onRemove, onToggle, onRe
     }
   }, [contextMenu])
 
-  // Reordering uses pointer events rather than HTML5 drag and drop, which the Tauri
-  // build gives up to native Explorer drops on Windows
+  // Reordering uses pointer events rather than HTML5 drag and drop, which the webview
+  // gives up to native Explorer drops on Windows
 
   // Row under a vertical position, clamped to the list
   function rowIndexAt(y) {

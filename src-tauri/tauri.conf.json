@@ -4,10 +4,10 @@
   "version": "../package.json",
   "identifier": "com.velvethorizon.folio",
   "build": {
-    "beforeDevCommand": "npm run tauri:vite",
+    "beforeDevCommand": "npm run vite",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run tauri:vite-build",
-    "frontendDist": "../out-tauri"
+    "beforeBuildCommand": "npm run vite:build",
+    "frontendDist": "../out"
   },
   "app": {
     "windows": [
@@ -27,12 +27,16 @@
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["**"]
+        "scope": [
+          "**"
+        ]
       }
     }
   },
   "bundle": {
     "active": false,
-    "icon": ["icons/icon.ico"]
+    "icon": [
+      "../build/icon.ico"
+    ]
   }
 }

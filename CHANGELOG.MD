@@ -4,6 +4,23 @@ All notable changes to Folio are documented here.
 
 ---
 
+## [1.2.0] — 2026-11-14
+
+### Changed
+- **Rebuilt on Rust**: Folio now runs on Tauri, with a Rust backend and Windows' built-in WebView2 engine, instead of Electron. The download drops from 71 MB to about 7 MB, and there's still no installer. Everything works as before, and your folders, settings and thumbnail cache carry over from 1.1.
+- **Folder reordering** in the sidebar now follows the mouse with plain pointer dragging; it works the same as before.
+
+### Improved
+- **Convert** also accepts WebP, GIF and TIFF files (as well as PNG, JPEG and BMP).
+- **Image info** shows the dimensions of WebP and AVIF files.
+- **Copy file** uses the Windows clipboard directly instead of starting PowerShell, so it's instant.
+- Files whose names contain `#` or `%` now open in the viewer.
+
+### Requirements
+- The Microsoft Edge WebView2 Runtime, which comes with Windows 11 and up-to-date Windows 10.
+
+---
+
 ## [1.1.4] — 2026-11-01
 
 ### Added

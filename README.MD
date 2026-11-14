@@ -203,28 +203,33 @@ images speak for themselves.
 
   System requirements
   -------------------
-  Windows 10 or Windows 11 (64-bit)
+  Windows 10 or Windows 11 (64-bit), with the Microsoft Edge WebView2 Runtime.
+  WebView2 comes with Windows 11 and with up-to-date Windows 10; if it's missing,
+  install the Evergreen Runtime from Microsoft's website.
 
   Installation
   ------------
-  There is no installer. Download Folio_x.x.x_Portable.exe, place it anywhere you
-  like — your Desktop, a folder, or a USB drive — and double-click to run.
-  Folio writes its settings and thumbnail cache to your user data folder and
-  leaves the rest of your system untouched.
+  There is no installer. Download Folio_x.x.x_Portable.exe (about 7 MB), place
+  it anywhere you like — your Desktop, a folder, or a USB drive — and
+  double-click to run. Folio writes its settings and thumbnail cache to
+  %APPDATA%\Folio and leaves the rest of your system untouched. Upgrading from
+  Folio 1.1 keeps your folders, settings and thumbnails.
 
-  To uninstall, simply delete the .exe file.
+  To uninstall, delete the .exe file. To also remove its data, delete
+  %APPDATA%\Folio and %LOCALAPPDATA%\com.velvethorizon.folio.
 
 
 --------------------------------------------------------------------------------
   TECH STACK
 --------------------------------------------------------------------------------
 
-  Shell         Electron
-  UI            React + Vite  (via electron-vite)
-  Packaging     electron-builder  (Windows portable)
-  Clipboard     Windows Forms API via PowerShell (CF_HDROP)
-  Metadata      Manual PNG tEXt chunk parser (no external libraries)
-  Thumbnails    Electron nativeImage + SHA-1 disk cache
+  Shell         Tauri 2  (Rust backend, Microsoft Edge WebView2)
+  UI            React + Vite
+  Packaging     Single portable .exe
+  Clipboard     Win32 clipboard API (CF_HDROP)
+  Metadata      PNG text chunk parser (Rust)
+  Thumbnails    Web Workers (decode, resize, WebP) + SHA-1 disk cache
+  Adjustments   WebGL2 shader with a guided-filter local tone map
 
 
 --------------------------------------------------------------------------------

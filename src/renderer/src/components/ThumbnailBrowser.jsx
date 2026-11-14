@@ -243,7 +243,7 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
     setBulkMoveOpen(false)
     const paths = [...selected]
     try {
-      const results = await window.electronAPI.moveImagesBulk(paths, targetFolder)
+      const results = await window.folio.moveImagesBulk(paths, targetFolder)
       // single state update for all moved files
       const moved = results.filter(r => r.ok)
       const failed = results.filter(r => !r.ok)
@@ -263,7 +263,7 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
     setConverting(true)
     try {
       const paths = [...selected]
-      const result = await window.electronAPI.convertImagesBulk(paths, format)
+      const result = await window.folio.convertImagesBulk(paths, format)
       const msg = result.failed > 0
         ? `Converted ${result.success} file(s).\n${result.failed} failed.`
         : `Converted ${result.success} file(s) to ${format.toUpperCase()}.`
@@ -278,7 +278,7 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
 
   async function handleShowMeta(filePath) {
     try {
-      const meta = await window.electronAPI.getImageMetadata(filePath)
+      const meta = await window.folio.getImageMetadata(filePath)
       setMetaInfo(meta)
     } catch (err) {
       alert(`Could not read metadata:\n${err?.message || err}`)
@@ -288,7 +288,7 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
   async function handleConvert(sourcePath, format) {
     setContextMenu(null)
     try {
-      await window.electronAPI.convertImage(sourcePath, format)
+      await window.folio.convertImage(sourcePath, format)
     } catch (err) {
       alert(`Conversion failed:\n${err?.message || err}`)
     }
@@ -464,7 +464,7 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
                       lines.push('\n' + Object.entries(params).map(([k, v]) => `${k}: ${v}`).join(', '))
                     const content = lines.join('\n')
                     const defaultPath = metaInfo.name.replace(/\.[^.]+$/, '') + '.txt'
-                    window.electronAPI.saveTextFile(defaultPath, content)
+                    window.folio.saveTextFile(defaultPath, content)
                   }}
                   title="Save parameters as .txt"
                 >
@@ -524,7 +524,7 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
             onClick={async () => {
               const path = contextMenu.path
               setContextMenu(null)
-              const ok = await window.electronAPI.copyImage(path)
+              const ok = await window.folio.copyImage(path)
               if (!ok) alert('Failed to copy image to clipboard.')
             }}
           >

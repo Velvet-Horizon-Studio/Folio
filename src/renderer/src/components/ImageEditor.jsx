@@ -215,7 +215,7 @@ export default function ImageEditor({ path, onClose, onSaved }) {
     let url = null
     ;(async () => {
       try {
-        const bytes = await window.electronAPI.readImageBytes(path)
+        const bytes = await window.folio.readImageBytes(path)
         if (!bytes) throw new Error('Could not read the file.')
         const blob = new Blob([bytes])
         // Straight (not premultiplied) alpha, so WebGL gets exact colors at soft edges
@@ -449,7 +449,7 @@ export default function ImageEditor({ path, onClose, onSaved }) {
         quality: format === 'png' ? undefined : quality / 100,
       })
       const bytes = new Uint8Array(await blob.arrayBuffer())
-      const saved = await window.electronAPI.saveEditedImage(path, bytes, fmt.ext, mode)
+      const saved = await window.folio.saveEditedImage(path, bytes, fmt.ext, mode)
       if (saved) {
         onSaved(saved, mode)
         onClose()

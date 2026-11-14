@@ -49,11 +49,10 @@ export default function App() {
   const [editPath, setEditPath] = useState(null) // image open in the resize/crop editor
   const [editVersions, setEditVersions] = useState({}) // path → bump count after an overwrite
   const hideTimerRef = useRef(null)
-  const dragCounterRef = useRef(0)
 
   // Load saved config on first mount
   useEffect(() => {
-    window.electronAPI.loadConfig().then((cfg) => {
+    window.folio.loadConfig().then((cfg) => {
       if (cfg) {
         if (Array.isArray(cfg.folders)) {
           // Migrate old string[] format to { path, active }[]
@@ -89,22 +88,22 @@ export default function App() {
     // Only overwrite lastImagePath once images are loaded so we don't
     // clobber the saved path during the async scan on startup
     if (images.length > 0) payload.lastImagePath = images[currentIndex]?.path ?? null
-    window.electronAPI.saveConfig(payload)
+    window.folio.saveConfig(payload)
   }, [folders, intervalMs, shuffled, transition, transitionDuration,
       sidebarTab, sidebarWidth, thumbSize, startupBehavior, keepAwake, currentIndex, images])
 
   // Keep the display awake only while a slideshow is actively playing
   useEffect(() => {
-    window.electronAPI.setPreventSleep(keepAwake && isPlaying)
+    window.folio.setPreventSleep(keepAwake && isPlaying)
   }, [keepAwake, isPlaying])
 
   useEffect(() => { imagesRef.current = images }, [images])
   useEffect(() => { currentIndexRef.current = currentIndex }, [currentIndex])
   useEffect(() => { startupBehaviorRef.current = startupBehavior }, [startupBehavior])
 
-  // Sync fullscreen state from main process
+  // Sync fullscreen state from the window
   useEffect(() => {
-    const unsubscribe = window.electronAPI.onFullscreenChanged((val) => {
+    const unsubscribe = window.folio.onFullscreenChanged((val) => {
       setIsFullscreen(val)
     })
     return unsubscribe
@@ -117,7 +116,7 @@ export default function App() {
       if (helpText !== null) {
         setHelpText(null)
       } else if (isFullscreen) {
-        window.electronAPI.setFullscreen(false)
+        window.folio.setFullscreen(false)
       } else {
         window.close()
       }
@@ -130,15 +129,15 @@ export default function App() {
   useEffect(() => {
     const activePaths = folders.filter((f) => f.active).map((f) => f.path)
     if (activePaths.length === 0) {
-      window.electronAPI.watchFolders([])
+      window.folio.watchFolders([])
       setImages([])
       setCurrentIndex(0)
       setIsPlaying(false)
       return
     }
-    window.electronAPI.watchFolders(activePaths)
+    window.folio.watchFolders(activePaths)
     setLoading(true)
-    window.electronAPI.scanImages(activePaths).then((imgs) => {
+    window.folio.scanImages(activePaths).then((imgs) => {
       const list = shuffled ? shuffle(imgs) : imgs
       setImages(list)
       const behavior = startupBehaviorRef.current
@@ -167,7 +166,7 @@ export default function App() {
 
   // Listen for file-system changes detected by folder watchers
   useEffect(() => {
-    const unsubscribe = window.electronAPI.onImagesUpdated((newRawList) => {
+    const unsubscribe = window.folio.onImagesUpdated((newRawList) => {
       const prev = imagesRef.current
       const currentPath = prev[currentIndexRef.current]?.path
 
@@ -197,7 +196,7 @@ export default function App() {
   }, [isPlaying, images.length, intervalMs])
 
   const handleAddFolder = useCallback(async () => {
-    const path = await window.electronAPI.selectFolder()
+    const path = await window.folio.selectFolder()
     if (path && !folders.some((f) => f.path === path)) {
       setFolders((f) => [...f, { path, active: true }])
     }
@@ -219,7 +218,7 @@ export default function App() {
       .map(img => img.path)
     if (paths.length === 0) return
     try {
-      const results = await window.electronAPI.moveImagesBulk(paths, targetFolderPath)
+      const results = await window.folio.moveImagesBulk(paths, targetFolderPath)
       const moved = results.filter(r => r.ok)
       const failed = results.filter(r => !r.ok)
       if (moved.length > 0) {
@@ -273,7 +272,7 @@ export default function App() {
 
   const handleToggleFullscreen = useCallback(async () => {
     const next = !isFullscreen
-    await window.electronAPI.setFullscreen(next)
+    await window.folio.setFullscreen(next)
     setIsFullscreen(next)
   }, [isFullscreen])
 
@@ -286,13 +285,13 @@ export default function App() {
   }, [])
 
   const handleOpenHelp = useCallback(async () => {
-    const text = await window.electronAPI.getReadme()
+    const text = await window.folio.getReadme()
     setHelpText(text ?? 'Help content is unavailable.')
   }, [])
 
   // Reload thumbnails: clear the cache and bump the key so every item re-fetches
   const handleReloadThumbnails = useCallback(async () => {
-    try { await window.electronAPI.reloadThumbnails() } catch {}
+    try { await window.folio.reloadThumbnails() } catch {}
     setThumbReloadKey((k) => k + 1)
   }, [])
 
@@ -324,7 +323,7 @@ export default function App() {
 
   const handleDeleteImage = useCallback(async (path) => {
     try {
-      await window.electronAPI.trashImage(path)
+      await window.folio.trashImage(path)
     } catch (err) {
       alert(`Could not move file to Recycle Bin:\n${err?.message || err}`)
       return
@@ -344,13 +343,13 @@ export default function App() {
   }, [])
 
   const handleRenameImage = useCallback(async (oldPath, newName) => {
-    const newPath = await window.electronAPI.renameImage(oldPath, newName)
+    const newPath = await window.folio.renameImage(oldPath, newName)
     setImages((prev) => prev.map((img) => img.path === oldPath ? { ...img, path: newPath } : img))
   }, [])
 
   const handleMoveImage = useCallback(async (sourcePath, targetFolder) => {
     try {
-      const newPath = await window.electronAPI.moveImage(sourcePath, targetFolder)
+      const newPath = await window.folio.moveImage(sourcePath, targetFolder)
       setImages((prev) => prev.map((img) =>
         img.path === sourcePath ? { ...img, path: newPath, folder: targetFolder } : img
       ))
@@ -406,53 +405,19 @@ export default function App() {
     hideTimerRef.current = setTimeout(() => setControlsVisible(false), 5000)
   }, [isFullscreen])
 
-  const handleDragEnter = useCallback((e) => {
-    e.preventDefault()
-    dragCounterRef.current++
-    if (dragCounterRef.current === 1) setIsDragging(true)
-  }, [])
-
-  const handleDragLeave = useCallback((e) => {
-    e.preventDefault()
-    dragCounterRef.current--
-    if (dragCounterRef.current === 0) setIsDragging(false)
-  }, [])
-
-  const handleDragOver = useCallback((e) => {
-    e.preventDefault()
-  }, [])
-
-  const handleDrop = useCallback((e) => {
-    e.preventDefault()
-    dragCounterRef.current = 0
-    setIsDragging(false)
-    const newPaths = []
-    for (const item of Array.from(e.dataTransfer.items)) {
-      const entry = item.webkitGetAsEntry()
-      if (entry && entry.isDirectory) {
-        const file = item.getAsFile()
-        if (file && file.path) newPaths.push(file.path)
-      }
-    }
-    addFolders(newPaths)
-  }, [])
-
-  const addFolders = useCallback((newPaths) => {
-    if (newPaths.length === 0) return
-    setFolders((prev) => {
-      const existing = new Set(prev.map((f) => f.path))
-      const toAdd = newPaths.filter((p) => !existing.has(p)).map((p) => ({ path: p, active: true }))
-      return [...prev, ...toAdd]
-    })
-  }, [])
-
-  // Under Tauri, Explorer drops arrive as native window events (with real paths)
-  // instead of HTML5 drop events
-  useEffect(() => window.electronAPI.onFolderDrag?.((e) => {
+  // Folders dragged in from Explorer. Drops arrive as native window events (the
+  // webview's HTML5 drop events carry no file paths); files are ignored.
+  useEffect(() => window.folio.onFolderDrag((e) => {
     if (e.type === 'enter') setIsDragging(true)
-    else if (e.type === 'leave') { dragCounterRef.current = 0; setIsDragging(false) }
-    else if (e.type === 'drop') addFolders(e.folders)
-  }), [addFolders])
+    else if (e.type === 'leave') setIsDragging(false)
+    else if (e.type === 'drop') {
+      setFolders((prev) => {
+        const existing = new Set(prev.map((f) => f.path))
+        const toAdd = e.folders.filter((p) => !existing.has(p)).map((p) => ({ path: p, active: true }))
+        return [...prev, ...toAdd]
+      })
+    }
+  }), [])
 
   const currentImage = images[currentIndex] || null
 
@@ -460,10 +425,6 @@ export default function App() {
     <div
       className={`app-root${isFullscreen ? ' fullscreen' : ''}${isFullscreen && !controlsVisible ? ' cursor-hidden' : ''}`}
       onMouseMove={handleMouseMove}
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
     >
       {isDragging && (
         <div className="drop-overlay">
@@ -488,7 +449,7 @@ export default function App() {
             <div className="app-brand">
               <div className="app-name-row">
                 <span className="app-title">Folio</span>
-                <span className="app-version">v.1.1.4</span>
+                <span className="app-version">v.1.2.0</span>
               </div>
               <div className="app-tagline">Your images, beautifully kept.</div>
             </div>

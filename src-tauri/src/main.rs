@@ -1,6 +1,5 @@
-// Folio's backend: a Rust port of the Electron main process (src/main/). The React
-// renderer is shared; src/renderer/src/tauriBridge.js maps its window.electronAPI
-// calls onto the commands below.
+// Folio's backend. The React renderer (src/renderer) reaches these commands through
+// src/renderer/src/backend.js, which exposes them as window.folio.*.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod png;
@@ -25,7 +24,7 @@ use watch::FolderWatch;
 const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif", "avif", "svg"];
 
 struct Paths {
-    data: PathBuf, // config.json and thumbnails/, shared with the Electron build
+    data: PathBuf, // config.json and thumbnails/
 }
 
 #[derive(Default)]
@@ -477,8 +476,8 @@ fn get_readme() -> &'static str {
 }
 
 fn data_dir(app: &AppHandle) -> PathBuf {
-    // %APPDATA%\Folio is the Electron build's userData folder: sharing it keeps folders,
-    // settings and the thumbnail cache when switching between the two builds.
+    // %APPDATA%\Folio is where Folio 1.1 (Electron) kept its data: using it keeps
+    // folders, settings and the thumbnail cache on upgrade.
     // FOLIO_DATA_DIR overrides it (automated tests use a scratch folder).
     if let Some(d) = std::env::var_os("FOLIO_DATA_DIR") {
         return PathBuf::from(d);

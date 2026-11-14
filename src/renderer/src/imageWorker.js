@@ -1,5 +1,5 @@
 // Decodes an image with Chromium, resizes it and re-encodes it. Runs in a Web Worker
-// so the work happens off both the UI thread and the main process.
+// so the work happens off the UI thread.
 //
 // op.kind 'thumb':  shortest side = op.size (thumbnails are square, object-fit: cover),
 //                   long side capped at op.maxLongSide

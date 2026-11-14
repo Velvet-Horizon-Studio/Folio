@@ -76,7 +76,7 @@ export default function BulkResize({ paths, onFinished }) {
         if (result.unchanged) { unchanged++; return }
         const mode = saveMode === 'overwrite' && own ? 'overwrite' : 'sibling'
         if (saveMode === 'overwrite' && !own) asNew++
-        const saved = await window.electronAPI.saveEditedImage(path, new Uint8Array(result.out), fmt.ext, mode, '_resized')
+        const saved = await window.folio.saveEditedImage(path, new Uint8Array(result.out), fmt.ext, mode, '_resized')
         if (!saved) { failed++; return }
         resized++
         if (mode === 'overwrite') overwritten.push(saved)

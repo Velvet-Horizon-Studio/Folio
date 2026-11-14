@@ -2,8 +2,8 @@
 // asset protocol. They're generated in renderer Web Workers, so the backend only
 // stats, reads and writes files.
 //
-// Name: <sha1(path)>_<sha1(size|mtimeMs) prefix>.webp, the same scheme as the
-// Electron build, so both share one cache. The version part means a file edited
+// Name: <sha1(path)>_<sha1(size|mtimeMs) prefix>.webp, the scheme Folio 1.1 (Electron)
+// used, so its cache carries over. The version part means a file edited
 // outside Folio gets a fresh thumbnail; the path part lets a newer thumbnail replace
 // an older one for the same image instead of leaving it behind.
 

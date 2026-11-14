@@ -2,7 +2,7 @@
 // loadable URLs; misses (and bulk resizes) are decoded and re-encoded in a pool of
 // Web Workers, then written to disk by the backend.
 import ImageWorker from './imageWorker.js?worker&inline'
-import { fileUrl } from './platform'
+import { fileUrl } from './backend'
 
 // Shortest side in px. Covers the largest grid size (200px) at 150% display scaling.
 const THUMB_SIZE = 320
@@ -94,7 +94,7 @@ function finish(path, req, url) {
 }
 
 async function start(path, req) {
-  const res = await window.electronAPI.getThumbnail(path)
+  const res = await window.folio.getThumbnail(path)
   if (req.listeners.size === 0) { // scrolled away meanwhile
     if (requests.get(path) === req) requests.delete(path)
     return
@@ -106,11 +106,11 @@ async function start(path, req) {
       req.job = null
       let url = null
       try {
-        const bytes = await window.electronAPI.readImageBytes(path)
+        const bytes = await window.folio.readImageBytes(path)
         const result = bytes && await runOnWorker(worker, bytes, {
           kind: 'thumb', size: THUMB_SIZE, maxLongSide: MAX_LONG_SIDE, mime: 'image/webp', quality: WEBP_QUALITY,
         }, JOB_TIMEOUT_MS)
-        url = result?.out ? await window.electronAPI.saveThumbnail(res.file, result.out) : null
+        url = result?.out ? await window.folio.saveThumbnail(res.file, result.out) : null
       } catch {}
       finish(path, req, url)
     },
@@ -155,7 +155,7 @@ export function resizeImage(path, opts) {
       bulk: true,
       run: async (worker) => {
         try {
-          const bytes = await window.electronAPI.readImageBytes(path)
+          const bytes = await window.folio.readImageBytes(path)
           resolve(bytes ? await runOnWorker(worker, bytes, { kind: 'resize', ...opts }, BULK_TIMEOUT_MS) : null)
         } catch {
           resolve(null)

@@ -4,6 +4,5 @@ dist/
 .claude/
 MEMORY.md
 poc-tauri/
-out-tauri/
 src-tauri/target/
 src-tauri/gen/

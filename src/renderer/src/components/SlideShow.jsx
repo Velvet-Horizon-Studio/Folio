@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { fileUrl } from '../platform'
+import { fileUrl } from '../backend'
 import './SlideShow.css'
 
 // Crossfade model: each image is rendered as its own absolutely-positioned layer.
