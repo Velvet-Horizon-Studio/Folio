@@ -9,7 +9,11 @@ import './SlideShow.css'
 // start frame (opacity 0) from the very first paint — there is no transition baseline
 // to race, so a new image can never "appear instantly" without fading.
 
-export default function SlideShow({ image, version, index, total, transition, transitionDuration, isFullscreen, onToggleFullscreen }) {
+// version changes when the file is overwritten in the editor; the query string
+// busts Chromium's image cache so the new pixels show
+const imageSrc = (path, version) => `${fileUrl(path)}${version ? `?v=${version}` : ''}`
+
+export default function SlideShow({ image, version, preload, index, total, transition, transitionDuration, isFullscreen, onToggleFullscreen }) {
   // layers: [{ id, src }] — last entry is the foreground (current) image
   const [layers, setLayers] = useState([])
   const idRef = useRef(0)
@@ -22,6 +26,8 @@ export default function SlideShow({ image, version, index, total, transition, tr
   const dragRef = useRef({ active: false, startX: 0, startY: 0, startOX: 0, startOY: 0 })
   const lastRightClickRef = useRef(0)
   const rightClickTimerRef = useRef(null)
+  const currentReady = useRef(Promise.resolve()) // settles once the current image is decoded
+  const preloaded = useRef([]) // Image objects for the neighbours
 
   // Toggle between fit-to-window and native 1:1 pixel size
   function toggleRealSize() {
@@ -55,9 +61,7 @@ export default function SlideShow({ image, version, index, total, transition, tr
       return
     }
 
-    // version changes when the file is overwritten in the editor; the query string
-    // busts Chromium's image cache so the new pixels show
-    const src = `${fileUrl(image.path)}${version ? `?v=${version}` : ''}`
+    const src = imageSrc(image.path, version)
     let cancelled = false
 
     const show = () => {
@@ -78,17 +82,32 @@ export default function SlideShow({ image, version, index, total, transition, tr
     }
 
     // Decode off-screen, then mount. A superseding change cancels this pending show.
+    // A neighbour preloaded below is already decoded, so this resolves at once.
     const pre = new Image()
     pre.src = src
-    if (pre.decode) {
-      pre.decode().then(show).catch(show)
-    } else {
-      pre.onload = show
-      pre.onerror = show
-    }
+    currentReady.current = pre.decode().catch(() => {}).then(show)
 
     return () => { cancelled = true }
   }, [index, image, version, transition])
+
+  // Decode the images the next arrow key or slideshow step will show, once the
+  // current one is up, so they appear without a decoding delay. Holding the Image
+  // objects keeps their decoded pixels in Chromium's cache.
+  const preloadKey = (preload ?? []).map((p) => imageSrc(p.path, p.version)).join('\n')
+  useEffect(() => {
+    if (!preloadKey) { preloaded.current = []; return }
+    let cancelled = false
+    currentReady.current.then(() => {
+      if (cancelled) return
+      preloaded.current = preloadKey.split('\n').map((src) => {
+        const img = new Image()
+        img.src = src
+        img.decode().catch(() => {})
+        return img
+      })
+    })
+    return () => { cancelled = true }
+  }, [preloadKey])
 
   // Once the incoming image finishes animating, drop the backdrop layer beneath it
   function handleAnimationEnd(endedId) {

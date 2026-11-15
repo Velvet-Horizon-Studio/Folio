@@ -43,10 +43,10 @@ src/renderer/src/
 
 ### Renderer ↔ backend
 
-Components only call `window.folio.*` (set up by `backend.js`, imported first in `main.jsx`). Commands are snake_case (`get_thumbnail`); Tauri maps camelCase JS args to snake_case Rust params. Command errors arrive as strings and `backend.js` rethrows them as `Error`s.
+Components only call `window.folio.*` (set up by `backend.js`, imported first in `main.jsx`). Commands are snake_case (`get_thumbnails`); Tauri maps camelCase JS args to snake_case Rust params. Command errors arrive as strings and `backend.js` rethrows them as `Error`s.
 
 - Local images load through the asset protocol: always build `src` with `fileUrl(path)` (`http://asset.localhost/<encoded path>`). The query string is ignored by the protocol, so `?v=N` cache-busting works.
-- Large byte payloads (`save_thumbnail`, `save_edited_image`) go as raw request bodies, with their other arguments in percent-encoded `x-*` headers. `read_image_bytes` returns a raw `Response` (an ArrayBuffer in JS). Never pass big `Uint8Array`s as JSON args.
+- Large byte payloads (`save_thumbnails`, `save_edited_image`) go as raw request bodies, with their other arguments in percent-encoded `x-*` headers. `read_image_bytes` returns a raw `Response` (an ArrayBuffer in JS). Never pass big `Uint8Array`s as JSON args.
 - Dialogs (`tauri-plugin-dialog`, Rust side) use `blocking_*` calls inside `spawn_blocking`, modal to the main window. Slow file work also runs in `spawn_blocking`.
 - Explorer folder drops: the webview's HTML5 drop events carry no paths, so `onFolderDrag` reports the native drag-drop events and `filter_directories` keeps the folders. Native drop handling also disables HTML5 drag and drop inside the webview on Windows, which is why folder reordering uses pointer events. Don't add HTML5 DnD.
 - There's no fullscreen-changed event: `onFullscreenChanged` checks `isFullscreen()` after each resize.
@@ -83,9 +83,13 @@ Config is loaded once on mount. `lastImagePathRef.current` is set synchronously 
 
 WebP files in `thumbnails/`, named `<sha1(path)>_<sha1(size|mtimeMs)[0:16]>.webp`, so editing a file outside Folio invalidates its thumbnail. `mtimeMs` is computed and printed exactly like Node's (`secs·1e3 + nanos/1e6`, shortest round-trip), so 1.1's cache files still match. An in-memory index (sha1(path) → file name) is built at startup. It lets a regenerated thumbnail replace the old one, and lets rename, move and trash find an image's thumbnail without a stat. Entries unused for 90 days are pruned 15 s after startup; cache hits refresh their mtime at most weekly. Files in any other naming format are deleted at startup.
 
-Generation happens in the renderer (`thumbnails.js`). A pool of Web Workers (`imageWorker.js`, inlined via `?worker&inline`, at most 8 or cores − 2; a worker that crashes or exceeds its job timeout is terminated and replaced) decodes with Chromium (`createImageBitmap`), so every format WebView2 knows works, including WebP saved as `.jpg`. Each worker resizes to a shortest side of 320 px (long side capped at 1280) and encodes WebP q0.82. The backend only stats, reads and writes files. SVGs use the file itself.
+Generation happens in the renderer (`thumbnails.js`). A pool of Web Workers (`imageWorker.js`, inlined via `?worker&inline`, at most 8 or cores − 2; a worker that crashes or exceeds its job timeout is terminated and replaced; all are shut down after 8 s idle) fetches the file itself through the asset protocol (`cache: 'no-store'`, so file bytes never cross the UI thread) and decodes with Chromium (`createImageBitmap`), so every format WebView2 knows works, including WebP saved as `.jpg`. Each worker resizes to a shortest side of 320 px (long side capped at 1280) and encodes WebP q0.82. The backend only stats, reads and writes files. SVGs use the file itself.
 
-Scheduling: thumbnail misses go into a LIFO queue (the newest request is what just scrolled into view). `ThumbnailItem` keeps its IntersectionObserver connected and cancels its request when it leaves the viewport (+200 px), so queued thumbnails that were scrolled past are dropped. Bulk resize jobs use a separate FIFO queue, at most 3 at a time, and only run when no thumbnail is waiting.
+The grid is virtualized (`computeLayout` in `ThumbnailBrowser.jsx`): thumbnails and folder labels are absolutely positioned on a canvas, and only those within 1.5 viewport heights of it are mounted (a fast wheel flick is scrolled by the compositor ahead of the UI thread, so a small margin shows empty space), so a folder of thousands of images renders like a few screenfuls. The layout constants (`GAP`, `PAD_*`, `LABEL_H`) must match `ThumbnailBrowser.css`. `ThumbnailItem` and `ThumbnailBrowser` are memoized, so changing the current image re-renders only the two thumbnails involved. `thumbnails.js` remembers each image's last thumbnail URL (`peekThumbnail`, cleared on F5) and keeps the 600 most recently shown ones loaded in `Image` objects (pinning the small files in Chromium's memory cache), so a remounted thumbnail paints in its first frame while its request re-checks the cache. Thumbnail `<img>`s must not use `decoding="async"`, or remounted ones flash blank for a frame. The visible blocks render as one flat keyed list (`flatMap`); nested arrays would be matched by position and remount every thumbnail whenever a row enters or leaves the range.
+
+Scheduling: a mounted `ThumbnailItem` requests its thumbnail and cancels on unmount, so queued thumbnails that were scrolled past are dropped. Misses go into a LIFO queue (the newest request is what just scrolled into view), with on-screen requests taken before those in the off-screen margin (`setThumbnailOnScreen`). Bulk resize jobs use a separate FIFO queue, at most 3 at a time, and only run when no thumbnail is waiting.
+
+Viewer: `SlideShow` decodes the next and previous images (`preload` from App) once the current one is shown, so arrow keys and the slideshow show them without a decoding delay.
 
 Cache files are renamed on rename and move (size and mtime are unchanged), deleted on trash and editor overwrite, and wiped by `clear_thumbnail_cache` (F5).
 
@@ -102,8 +106,8 @@ Cache files are renamed on rename and move (size and mtime are unchanged), delet
 | `load_config` / `save_config` | `config.json` in the data folder |
 | `select_folder` | Folder picker dialog |
 | `watch_folders` | Watch folders (non-recursive); image changes emit `images-updated` with a fresh scan (400 ms debounce) |
-| `get_thumbnail` | `{ cached }` path if cached, `{ file }` (cache path to fill) if not, `null` if unreadable |
-| `save_thumbnail` | Raw WebP body to the `x-file` path from `get_thumbnail` (validated to the cache dir) |
+| `get_thumbnails` | Per path: `{ cached }` path if cached, `{ file }` (cache path to fill) if not, `null` if unreadable. Batched: `thumbnails.js` collects the lookups of one render, since each IPC call costs WebView2's UI thread ~3 ms |
+| `save_thumbnails` | Generated thumbnails, batched over 40 ms: raw body of concatenated WebPs, `x-files` = JSON `[[cache path from get_thumbnails, length], …]` (paths validated to the cache dir) |
 | `clear_thumbnail_cache` | Delete every cached thumbnail |
 | `read_image_bytes` | Raw file bytes for worker / editor decoding |
 | `save_edited_image` | Raw body; `x-mode`: `new` (save dialog), `sibling` (`<stem><x-suffix>.<ext>` next to the source, uniquified), `overwrite` (original to the Recycle Bin first). Copies PNG text chunks |

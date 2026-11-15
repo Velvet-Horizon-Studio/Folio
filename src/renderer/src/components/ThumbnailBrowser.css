@@ -21,12 +21,19 @@
   line-height: 1.7;
 }
 
-/* ── Folder section ── */
-.tb-group {
-  margin-bottom: 16px;
+/* ── Virtualized grid: labels and thumbnails are absolutely positioned on the
+   canvas; sizes and offsets come from computeLayout() in ThumbnailBrowser.jsx ── */
+.tb-canvas {
+  position: relative;
 }
 
+/* Height must match LABEL_H in ThumbnailBrowser.jsx */
 .tb-group-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 22px;
+  line-height: 14px;
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
@@ -38,13 +45,6 @@
   text-overflow: ellipsis;
 }
 
-/* ── Thumbnail grid — auto-fills columns based on --thumb-size ── */
-.tb-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--thumb-size, 80px), 1fr));
-  gap: 4px;
-}
-
 .tb-thumb {
   padding: 0;
   border: 2px solid transparent;
@@ -52,8 +52,7 @@
   overflow: hidden;
   cursor: pointer;
   background: var(--bg-card);
-  aspect-ratio: 1;
-  position: relative;
+  position: absolute;
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 

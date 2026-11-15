@@ -15,9 +15,18 @@ function targetScale(op, w, h) {
   return Math.min(1, op.scale ?? op.maxSide / Math.max(w, h))
 }
 
-self.onmessage = async ({ data: { id, bytes, op } }) => {
+// The image comes as `url` (an asset-protocol URL the worker reads itself, keeping
+// file I/O off the UI thread) or as `bytes`.
+async function load(url, bytes) {
+  if (!url) return new Blob([bytes])
+  const res = await fetch(url, { cache: 'no-store' }) // the file may have just been overwritten
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.blob()
+}
+
+self.onmessage = async ({ data: { id, url, bytes, op } }) => {
   try {
-    const full = await createImageBitmap(new Blob([bytes]))
+    const full = await createImageBitmap(await load(url, bytes))
     const { width: w, height: h } = full
     const s = targetScale(op, w, h)
     const tw = Math.max(1, Math.round(w * s))

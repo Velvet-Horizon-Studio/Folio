@@ -164,16 +164,23 @@ enum ThumbLookup {
     File(String),
 }
 
-// { cached } when a thumbnail exists, { file } (where to save one) when it must be
-// generated, null when the image itself can't be read
+// For each path: { cached } when a thumbnail exists, { file } (where to save one) when
+// it must be generated, null when the image itself can't be read. Batched because
+// each IPC call costs the webview's UI thread a few ms, and scrolling the grid mounts
+// many thumbnails per frame.
 #[tauri::command]
-async fn get_thumbnail(path: String, cache: State<'_, Arc<ThumbCache>>) -> Res<Option<ThumbLookup>> {
+async fn get_thumbnails(paths: Vec<String>, cache: State<'_, Arc<ThumbCache>>) -> Res<Vec<Option<ThumbLookup>>> {
     let cache = cache.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        cache.lookup(&path).map(|l| match l {
-            Lookup::Cached(p) => ThumbLookup::Cached(p.to_string_lossy().into_owned()),
-            Lookup::Missing(p) => ThumbLookup::File(p.to_string_lossy().into_owned()),
-        })
+        paths
+            .par_iter()
+            .map(|path| {
+                cache.lookup(path).map(|l| match l {
+                    Lookup::Cached(p) => ThumbLookup::Cached(p.to_string_lossy().into_owned()),
+                    Lookup::Missing(p) => ThumbLookup::File(p.to_string_lossy().into_owned()),
+                })
+            })
+            .collect()
     })
     .await
     .map_err(err)
@@ -192,15 +199,31 @@ async fn read_image_bytes(path: String) -> Res<Response> {
     Ok(Response::new(bytes))
 }
 
-// Body: WebP bytes. Header x-file: the cache path get_thumbnail handed out.
+// Several generated thumbnails in one call (batched like get_thumbnails).
+// Body: their WebP bytes, concatenated. Header x-files: JSON [[cache path from
+// get_thumbnails, byte length], ...] in body order. Returns each saved path or null.
 #[tauri::command]
-async fn save_thumbnail(request: Request<'_>, cache: State<'_, Arc<ThumbCache>>) -> Res<Option<String>> {
-    let file = header(&request, "x-file").ok_or("missing x-file")?;
-    let bytes = raw_body(&request)?;
+async fn save_thumbnails(request: Request<'_>, cache: State<'_, Arc<ThumbCache>>) -> Res<Vec<Option<String>>> {
+    let files: Vec<(String, usize)> =
+        serde_json::from_str(&header(&request, "x-files").ok_or("missing x-files")?).map_err(err)?;
+    let body = raw_body(&request)?;
+    if files.iter().map(|(_, len)| len).sum::<usize>() != body.len() {
+        return Err("x-files lengths don't match the body".into());
+    }
     let cache = cache.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || cache.save(&file, &bytes).map(|p| p.to_string_lossy().into_owned()))
-        .await
-        .map_err(err)
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut offset = 0;
+        files
+            .iter()
+            .map(|(file, len)| {
+                let bytes = &body[offset..offset + len];
+                offset += len;
+                cache.save(file, bytes).map(|p| p.to_string_lossy().into_owned())
+            })
+            .collect()
+    })
+    .await
+    .map_err(err)
 }
 
 // ── Editing and file operations ──────────────────────────────────────────────
@@ -508,10 +531,10 @@ fn main() {
             load_config,
             save_config,
             watch_folders,
-            get_thumbnail,
+            get_thumbnails,
             clear_thumbnail_cache,
             read_image_bytes,
-            save_thumbnail,
+            save_thumbnails,
             save_edited_image,
             trash_image,
             rename_image,

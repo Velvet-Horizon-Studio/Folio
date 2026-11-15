@@ -4,6 +4,19 @@ All notable changes to Folio are documented here.
 
 ---
 
+## [1.2.1] — 2026-11-15
+
+### Improved
+- **Large folders are fast.** With thousands of photos, the Browse grid only draws the thumbnails near the screen, so scrolling stays smooth and moving to another image no longer redraws the whole grid. Measured on 3,000 12-megapixel photos:
+  - Going to the next image takes under 10 ms instead of 120–240 ms.
+  - The first screen of new thumbnails appears in about 1 second instead of 4.7.
+  - Memory use is about 15% lower.
+- **Next and previous images are prepared in advance**, so the arrow keys and the slideshow show them instantly.
+- **Smooth scrolling** through the thumbnails, with no flicker: thumbnails already loaded show up instantly as they scroll back into view.
+- Thumbnails you can see are generated before the ones just off screen.
+
+---
+
 ## [1.2.0] — 2026-11-14
 
 ### Changed

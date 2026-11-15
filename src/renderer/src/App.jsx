@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import FolderManager from './components/FolderManager'
 import ThumbnailBrowser from './components/ThumbnailBrowser'
 import SlideShow from './components/SlideShow'
 import Controls from './components/Controls'
 import HelpOverlay from './components/HelpOverlay'
 import ImageEditor from './components/ImageEditor'
+import { forgetThumbnails } from './thumbnails'
 import './styles/App.css'
 
 
@@ -292,6 +293,7 @@ export default function App() {
   // Reload thumbnails: clear the cache and bump the key so every item re-fetches
   const handleReloadThumbnails = useCallback(async () => {
     try { await window.folio.reloadThumbnails() } catch {}
+    forgetThumbnails()
     setThumbReloadKey((k) => k + 1)
   }, [])
 
@@ -420,6 +422,12 @@ export default function App() {
   }), [])
 
   const currentImage = images[currentIndex] || null
+  // The images an arrow key or the slideshow shows next, decoded ahead of time
+  const n = images.length
+  const nextPath = n > 1 ? images[(currentIndex + 1) % n]?.path : undefined
+  const prevPath = n > 2 ? images[(currentIndex - 1 + n) % n]?.path : undefined
+  const preload = useMemo(() => [nextPath, prevPath].filter(Boolean).map((path) => ({ path, version: editVersions[path] })),
+    [nextPath, prevPath, editVersions])
 
   return (
     <div
@@ -449,7 +457,7 @@ export default function App() {
             <div className="app-brand">
               <div className="app-name-row">
                 <span className="app-title">Folio</span>
-                <span className="app-version">v.1.2.0</span>
+                <span className="app-version">v.1.2.1</span>
               </div>
               <div className="app-tagline">Your images, beautifully kept.</div>
             </div>
@@ -507,6 +515,7 @@ export default function App() {
         <SlideShow
           image={currentImage}
           version={currentImage ? editVersions[currentImage.path] : undefined}
+          preload={preload}
           index={currentIndex}
           total={images.length}
           transition={transition}

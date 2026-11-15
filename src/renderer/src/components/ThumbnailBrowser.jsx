@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { requestThumbnail } from '../thumbnails'
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, memo } from 'react'
+import { requestThumbnail, peekThumbnail, setThumbnailOnScreen } from '../thumbnails'
 import BulkResize from './BulkResize'
 import './ThumbnailBrowser.css'
 
@@ -21,50 +21,90 @@ function formatDate(iso) {
   return new Date(iso).toLocaleString()
 }
 
-// Individual thumbnail with lazy load, rename, delete, selection, and metadata
-function ThumbnailItem({ img, isActive, isSelected, scrollRef, onJumpTo, onDelete, onRename, onSelect, onContextMenu, onShowMeta, reloadKey, version }) {
-  const [src, setSrc] = useState(null)
+// Grid geometry, in px. The grid is virtualized: only the thumbnails within
+// the overscan margin of the viewport are mounted, each absolutely positioned, so a folder of
+// thousands of images costs no more to render than one screenful.
+const GAP = 4          // between thumbnails
+const PAD_X = 10       // .tb-scroll horizontal padding
+const PAD_TOP = 10     // .tb-scroll top padding
+const LABEL_H = 22     // folder label (.tb-group-label height)
+const GROUP_GAP = 16   // space after each folder's thumbnails
+// Mounted beyond the viewport, above and below: 1.5 viewport heights (at least
+// OVERSCAN_MIN), so a fast wheel flick, which the compositor scrolls ahead of the
+// UI thread, doesn't reach unmounted space
+const OVERSCAN_MIN = 600
+const SCROLL_STEP = 100 // the tracked scroll position moves in steps of this
+
+// Columns fill the width like `repeat(auto-fill, minmax(thumbSize, 1fr))`.
+// Returns the cell size, every block (folder label or row of thumbnails) with its
+// top offset, the canvas height, and each image's top offset by global index.
+function computeLayout(groups, width, thumbSize, count) {
+  const inner = Math.max(0, width - 2 * PAD_X)
+  const cols = Math.max(1, Math.floor((inner + GAP) / (thumbSize + GAP)))
+  const cell = Math.max(1, (inner - GAP * (cols - 1)) / cols)
+  const blocks = []
+  const topOf = new Float64Array(count)
+  let y = 0
+  for (const [folder, items] of groups) {
+    blocks.push({ kind: 'label', key: `label|${folder}`, folder, top: y, height: LABEL_H })
+    y += LABEL_H
+    for (let i = 0; i < items.length; i += cols) {
+      const row = items.slice(i, i + cols)
+      blocks.push({ kind: 'row', key: `row|${folder}|${i}`, items: row, top: y, height: cell })
+      for (const img of row) topOf[img.globalIndex] = y
+      y += cell + GAP
+    }
+    y += GROUP_GAP - GAP
+  }
+  return { cols, cell, blocks, topOf, height: Math.max(0, y) }
+}
+
+// Blocks overlapping [from, to] (blocks are sorted by top)
+function blocksInRange(blocks, from, to) {
+  let lo = 0, hi = blocks.length
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (blocks[mid].top + blocks[mid].height < from) lo = mid + 1
+    else hi = mid
+  }
+  const out = []
+  for (let i = lo; i < blocks.length && blocks[i].top <= to; i++) out.push(blocks[i])
+  return out
+}
+
+const collator = new Intl.Collator()
+
+// Individual thumbnail with lazy load, rename, delete, selection, and metadata.
+// Memoized: moving to another image re-renders only the two thumbnails involved.
+const ThumbnailItem = memo(function ThumbnailItem({ img, top, left, size, onScreen, isActive, isSelected, onJumpTo, onDelete, onRename, onSelect, onContextMenu, onShowMeta, reloadKey, version }) {
+  const [src, setSrc] = useState(() => peekThumbnail(img.path))
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState('')
-  const btnRef = useRef(null)
   const inputRef = useRef(null)
+  const firstLoad = useRef(true)
+  const onScreenRef = useRef(onScreen)
   const nameNoExt = stripExt(basename(img.path))
 
+  // Mounted means near the viewport: request now, and cancel on unmount (scrolled
+  // away) so whatever is on screen gets generated first
   useEffect(() => {
-    if (isActive && btnRef.current) scrollRef.current = btnRef.current
-  }, [isActive, scrollRef])
-
-  useEffect(() => {
-    const el = btnRef.current
-    if (!el) return
-    // Reset to the placeholder so a reload visibly re-fetches (and unsticks a
-    // thumbnail that previously failed to load).
-    setSrc(null)
-    // Request while near the viewport; if it scrolls away before its turn, the
-    // request is dropped so whatever is on screen now gets generated first
-    let cancel = null
-    let done = false
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          if (!cancel && !done) {
-            cancel = requestThumbnail(img.path, (url) => {
-              done = true
-              cancel = null
-              observer.disconnect()
-              if (url) setSrc(url)
-            })
-          }
-        } else if (cancel) {
-          cancel()
-          cancel = null
-        }
-      },
-      { rootMargin: '200px' }
-    )
-    observer.observe(el)
-    return () => { cancel?.(); observer.disconnect() }
+    // A reload or an edit resets to the placeholder so the refresh is visible (and a
+    // thumbnail that failed to load gets another try); a fresh mount keeps the
+    // remembered thumbnail while the request re-checks it
+    if (firstLoad.current) firstLoad.current = false
+    else setSrc(null)
+    let cancel = requestThumbnail(img.path, (url) => {
+      cancel = null
+      if (url) setSrc(url)
+    }, onScreenRef.current)
+    return () => cancel?.()
   }, [img.path, reloadKey, version])
+
+  // On-screen thumbnails are generated before the ones mounted just off screen
+  useEffect(() => {
+    onScreenRef.current = onScreen
+    setThumbnailOnScreen(img.path, onScreen)
+  }, [img.path, onScreen])
 
   useEffect(() => {
     if (renaming && inputRef.current) {
@@ -117,8 +157,8 @@ function ThumbnailItem({ img, isActive, isSelected, scrollRef, onJumpTo, onDelet
 
   return (
     <div
-      ref={btnRef}
       className={`tb-thumb${isActive ? ' tb-thumb-active' : ''}${isSelected ? ' tb-thumb-selected' : ''}`}
+      style={{ top, left, width: size, height: size }}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
       title={renaming ? undefined : basename(img.path)}
@@ -140,7 +180,9 @@ function ThumbnailItem({ img, isActive, isSelected, scrollRef, onJumpTo, onDelet
       ) : (
         <>
           {src
-            ? <img src={src} alt="" draggable={false} decoding="async" />
+            // No decoding="async": a remembered thumbnail scrolling back into view
+            // must paint together with its tile, or it flashes blank for a frame
+            ? <img src={src} alt="" draggable={false} />
             : <div className="tb-placeholder" />
           }
           <div className="tb-actions">
@@ -152,7 +194,7 @@ function ThumbnailItem({ img, isActive, isSelected, scrollRef, onJumpTo, onDelet
       )}
     </div>
   )
-}
+})
 
 const CONVERT_FORMATS = [
   { label: 'Save as PNG',  format: 'png'  },
@@ -161,9 +203,12 @@ const CONVERT_FORMATS = [
 
 
 
-export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDelete, onRename, onMove, onBulkMoved, onEdit, onEditSaved, editVersions, folders, thumbSize, onThumbSizeChange, reloadKey, onReload }) {
-  const activeRef = useRef(null)
+export default memo(function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDelete, onRename, onMove, onBulkMoved, onEdit, onEditSaved, editVersions, folders, thumbSize, onThumbSizeChange, reloadKey, onReload }) {
+  const scrollRef = useRef(null)
   const menuRef = useRef(null)
+  // Viewport of the scroll area: width (for the columns) and the scroll position,
+  // stepped so scrolling re-renders only when the mounted range should move
+  const [view, setView] = useState({ width: 0, height: 0, top: 0 })
   const [contextMenu, setContextMenu] = useState(null)
   const [moveSubmenuOpen, setMoveSubmenuOpen] = useState(false)
   const [bulkMoveOpen, setBulkMoveOpen] = useState(false)
@@ -182,11 +227,71 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
     return () => clearTimeout(t)
   }, [reloadKey])
 
-  useEffect(() => {
-    if (activeRef.current) {
-      activeRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  // Images grouped by folder (in folder-list order), each group sorted by path
+  const groups = useMemo(() => {
+    const folderOrder = new Map((folders ?? []).map((f, i) => [f.path, i]))
+    const sorted = images
+      .map((img, i) => ({ ...img, globalIndex: i }))
+      .sort((a, b) =>
+        (folderOrder.get(a.folder) ?? 999) - (folderOrder.get(b.folder) ?? 999)
+        || collator.compare(a.path, b.path)
+      )
+    const map = new Map()
+    for (const img of sorted) {
+      if (!map.has(img.folder)) map.set(img.folder, [])
+      map.get(img.folder).push(img)
     }
-  }, [currentIndex])
+    return [...map.entries()]
+  }, [images, folders])
+
+  const layout = useMemo(
+    () => computeLayout(groups, view.width, thumbSize, images.length),
+    [groups, view.width, thumbSize, images.length]
+  )
+
+  // Track the scroll area's size (sidebar resize, scrollbar appearing) and position
+  const hasImages = images.length > 0
+  useLayoutEffect(() => {
+    const sc = scrollRef.current
+    if (!sc) return
+    const measure = () => {
+      const top = Math.floor(Math.max(0, sc.scrollTop - PAD_TOP) / SCROLL_STEP) * SCROLL_STEP
+      setView((v) => (v.width === sc.clientWidth && v.height === sc.clientHeight && v.top === top
+        ? v : { width: sc.clientWidth, height: sc.clientHeight, top }))
+    }
+    measure()
+    let frame = 0
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(() => { frame = 0; measure() })
+    }
+    const ro = new ResizeObserver(measure)
+    ro.observe(sc)
+    sc.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      ro.disconnect()
+      sc.removeEventListener('scroll', onScroll)
+      cancelAnimationFrame(frame)
+    }
+  }, [hasImages])
+
+  // Bring the current image into view when it changes (and once the grid has a
+  // width, e.g. on opening the Browse tab). Short hops scroll smoothly.
+  const measured = view.width > 0
+  useEffect(() => {
+    const sc = scrollRef.current
+    if (!sc || !measured || currentIndex >= images.length) return
+    const y = layout.topOf[currentIndex] + PAD_TOP
+    const viewTop = sc.scrollTop
+    const viewBottom = viewTop + sc.clientHeight
+    let target = null
+    if (y - GAP < viewTop) target = y - GAP <= PAD_TOP + LABEL_H ? 0 : y - GAP // first row: show the label too
+    else if (y + layout.cell + GAP > viewBottom) target = y + layout.cell + GAP - sc.clientHeight
+    if (target === null) return
+    const far = Math.abs(target - viewTop) > sc.clientHeight * 2
+    sc.scrollTo({ top: Math.max(0, target), behavior: far ? 'auto' : 'smooth' })
+    // Only when the current image changes; not when the layout shifts under the user
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, measured])
 
   // Dismiss context menu on outside click or Escape
   useEffect(() => {
@@ -212,13 +317,15 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
     })
   }, [images])
 
-  function toggleSelect(path) {
+  const toggleSelect = useCallback((path) => {
     setSelected(prev => {
       const next = new Set(prev)
       next.has(path) ? next.delete(path) : next.add(path)
       return next
     })
-  }
+  }, [])
+
+  const openContextMenu = useCallback((x, y, path) => setContextMenu({ x, y, path }), [])
 
   async function handleBulkDelete() {
     const paths = [...selected]
@@ -276,14 +383,14 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
     }
   }
 
-  async function handleShowMeta(filePath) {
+  const handleShowMeta = useCallback(async (filePath) => {
     try {
       const meta = await window.folio.getImageMetadata(filePath)
       setMetaInfo(meta)
     } catch (err) {
       alert(`Could not read metadata:\n${err?.message || err}`)
     }
-  }
+  }, [])
 
   async function handleConvert(sourcePath, format) {
     setContextMenu(null)
@@ -294,19 +401,11 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
     }
   }
 
-  const folderOrder = new Map((folders ?? []).map((f, i) => [f.path, i]))
-  const sorted = [...images]
-    .map((img, i) => ({ ...img, globalIndex: i }))
-    .sort((a, b) =>
-      (folderOrder.get(a.folder) ?? 999) - (folderOrder.get(b.folder) ?? 999)
-      || a.path.localeCompare(b.path)
-    )
-
-  const groups = new Map()
-  for (const img of sorted) {
-    if (!groups.has(img.folder)) groups.set(img.folder, [])
-    groups.get(img.folder).push(img)
-  }
+  // Mount only what's near the viewport
+  const overscan = Math.max(OVERSCAN_MIN, view.height * 1.5)
+  const visibleBlocks = measured
+    ? blocksInRange(layout.blocks, view.top - overscan, view.top + view.height + SCROLL_STEP + overscan)
+    : []
 
   return (
     <div className="tb-root">
@@ -315,33 +414,36 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
           No images loaded.<br />Add and enable folders first.
         </div>
       ) : (
-        <div className="tb-scroll" style={{ '--thumb-size': `${thumbSize}px` }}>
-          {[...groups.entries()].map(([folder, items]) => (
-            <div key={folder} className="tb-group">
-              <div className="tb-group-label" title={folder}>
-                {basename(folder)}
-              </div>
-              <div className="tb-grid">
-                {items.map((img) => (
-                  <ThumbnailItem
-                    key={img.path}
-                    img={img}
-                    isActive={img.globalIndex === currentIndex}
-                    isSelected={selected.has(img.path)}
-                    scrollRef={activeRef}
-                    onJumpTo={onJumpTo}
-                    onDelete={onDelete}
-                    onRename={onRename}
-                    onSelect={toggleSelect}
-                    onContextMenu={(x, y, path) => setContextMenu({ x, y, path })}
-                    onShowMeta={handleShowMeta}
-                    reloadKey={reloadKey}
-                    version={editVersions?.[img.path]}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
+        <div className="tb-scroll" ref={scrollRef}>
+          <div className="tb-canvas" style={{ height: layout.height }}>
+            {/* One flat, keyed list (flatMap, not nested arrays): React matches nested
+                arrays by position, so every row shifting in or out of range would
+                remount all the thumbnails and make them flash */}
+            {visibleBlocks.flatMap((block) => block.kind === 'label' ? [
+              <div key={block.key} className="tb-group-label" style={{ top: block.top }} title={block.folder}>
+                {basename(block.folder)}
+              </div>,
+            ] : block.items.map((img, col) => (
+              <ThumbnailItem
+                key={img.path}
+                img={img}
+                top={block.top}
+                left={col * (layout.cell + GAP)}
+                size={layout.cell}
+                onScreen={block.top + block.height >= view.top && block.top <= view.top + view.height + SCROLL_STEP}
+                isActive={img.globalIndex === currentIndex}
+                isSelected={selected.has(img.path)}
+                onJumpTo={onJumpTo}
+                onDelete={onDelete}
+                onRename={onRename}
+                onSelect={toggleSelect}
+                onContextMenu={openContextMenu}
+                onShowMeta={handleShowMeta}
+                reloadKey={reloadKey}
+                version={editVersions?.[img.path]}
+              />
+            )))}
+          </div>
         </div>
       )}
 
@@ -589,4 +691,4 @@ export default function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDel
       )}
     </div>
   )
-}
+})

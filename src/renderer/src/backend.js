@@ -38,14 +38,20 @@ window.folio = {
   loadConfig: () => call('load_config').catch(() => null),
   saveConfig: (config) => call('save_config', { config }).catch(() => {}),
 
-  // { url } when cached, { file } (the cache path to fill) when not, null if unreadable
-  getThumbnail: async (path) => {
-    const r = await call('get_thumbnail', { path })
-    if (!r) return null
-    return r.cached ? { url: convertFileSrc(r.cached) } : { file: r.file }
+  // One result per path: { url } when cached, { file } (the cache path to fill) when
+  // not, null if unreadable
+  getThumbnails: async (paths) =>
+    (await call('get_thumbnails', { paths })).map((r) =>
+      !r ? null : r.cached ? { url: convertFileSrc(r.cached) } : { file: r.file }),
+  // items: [{ file (from getThumbnails), bytes: ArrayBuffer }] → one URL (or null) each
+  saveThumbnails: async (items) => {
+    const body = new Uint8Array(items.reduce((n, it) => n + it.bytes.byteLength, 0))
+    let offset = 0
+    for (const it of items) { body.set(new Uint8Array(it.bytes), offset); offset += it.bytes.byteLength }
+    const files = JSON.stringify(items.map((it) => [it.file, it.bytes.byteLength]))
+    const saved = await callRaw('save_thumbnails', body, { 'x-files': files }).catch(() => items.map(() => null))
+    return saved.map((p) => (p ? convertFileSrc(p) : null))
   },
-  saveThumbnail: (file, bytes) =>
-    callRaw('save_thumbnail', bytes, { 'x-file': file }).then((p) => (p ? convertFileSrc(p) : null)).catch(() => null),
   reloadThumbnails: () => call('clear_thumbnail_cache'),
   readImageBytes: (path) => call('read_image_bytes', { path }).then((b) => new Uint8Array(b)).catch(() => null),
 

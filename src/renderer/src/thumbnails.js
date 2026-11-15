@@ -21,8 +21,13 @@ const workers = []
 const idle = []
 let nextId = 0
 
+// Workers left idle this long are shut down, giving their memory back
+const IDLE_SHUTDOWN_MS = 8000
+let idleTimer = 0
+
 // Each worker runs one job at a time; `job` is its current { id, resolve, timer }
 function getWorker() {
+  clearTimeout(idleTimer)
   if (idle.length) return idle.pop()
   const w = new ImageWorker()
   w.onmessage = ({ data }) => {
@@ -50,31 +55,45 @@ function retire(w) {
   finishJob(w, null)
 }
 
-function runOnWorker(worker, bytes, op, timeoutMs) {
+// The worker reads the file itself through the asset protocol, so file bytes never
+// pass through the UI thread
+function runOnWorker(worker, path, op, timeoutMs) {
   return new Promise((resolve) => {
     const id = ++nextId
     worker.job = { id, resolve, timer: setTimeout(() => retire(worker), timeoutMs) }
-    // Transfer the buffer instead of copying it (IPC hands us a fresh, unshared one)
-    const buf = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
-      ? bytes.buffer
-      : bytes.slice().buffer
-    worker.postMessage({ id, bytes: buf, op }, [buf])
+    worker.postMessage({ id, url: fileUrl(path), op })
   })
 }
 
 // ── Scheduling ──────────────────────────────────────────────────────────────
-// Thumbnails go newest-first, since the latest request is what just scrolled into
+// Thumbnails on screen go before those just off it (mounted ahead of scrolling),
+// and newest-first within each, since the latest request is what just scrolled into
 // view. Bulk jobs run in order, a few at a time, and only when no thumbnail waits.
 const thumbQueue = []
 const bulkQueue = []
 let bulkActive = 0
 
+function takeThumbJob() {
+  for (let i = thumbQueue.length - 1; i >= 0; i--) {
+    if (thumbQueue[i].req.onScreen) return thumbQueue.splice(i, 1)[0]
+  }
+  return thumbQueue.pop()
+}
+
 function pump() {
   while (hasFreeWorker()) {
     let job
-    if (thumbQueue.length) job = thumbQueue.pop()
+    if (thumbQueue.length) job = takeThumbJob()
     else if (bulkQueue.length && bulkActive < BULK_CONCURRENCY) job = bulkQueue.shift()
-    else return
+    else {
+      if (idle.length === workers.length) { // nothing running
+        clearTimeout(idleTimer)
+        idleTimer = setTimeout(() => {
+          for (const w of idle.splice(0)) retire(w)
+        }, IDLE_SHUTDOWN_MS)
+      }
+      return
+    }
     const worker = getWorker()
     if (job.bulk) bulkActive++
     job.run(worker).finally(() => {
@@ -87,32 +106,107 @@ function pump() {
 
 // ── Thumbnails ──────────────────────────────────────────────────────────────
 const requests = new Map() // image path → { listeners: Set, job: queued job | null }
+// Last URL each image's thumbnail loaded from. The grid only mounts the thumbnails
+// near the viewport, so one scrolled back into view shows this right away (no
+// placeholder flash) while its request re-checks the cache.
+const known = new Map()
+// The most recently shown thumbnails stay loaded in an Image object each. That keeps
+// the (small, encoded) files in Chromium's memory cache, so a thumbnail scrolling back
+// into view is complete on its very first frame instead of reloading and flashing.
+const PINNED_MAX = 600
+const pinned = new Map() // url → Image, oldest first
+
+function pin(url) {
+  const img = pinned.get(url)
+  if (img) { pinned.delete(url); pinned.set(url, img); return }
+  const next = new Image()
+  next.src = url
+  pinned.set(url, next)
+  if (pinned.size > PINNED_MAX) pinned.delete(pinned.keys().next().value)
+}
+
+export function peekThumbnail(path) {
+  const url = known.get(path) ?? null
+  if (url) pin(url)
+  return url
+}
+
+export function forgetThumbnails() {
+  known.clear()
+  pinned.clear()
+}
 
 function finish(path, req, url) {
   if (requests.get(path) === req) requests.delete(path)
+  if (url) { known.set(path, url); pin(url) }
+  else known.delete(path)
   for (const fn of req.listeners) fn(url)
 }
 
+// Cache lookups are batched per frame: every IPC call costs the UI thread a few ms,
+// and scrolling mounts a row or more of thumbnails at a time
+let lookupBatch = null // Map path → [resolve]
+
+function lookup(path) {
+  return new Promise((resolve) => {
+    if (!lookupBatch) {
+      lookupBatch = new Map()
+      setTimeout(sendLookups, 0) // after the current commit has mounted everything
+    }
+    const waiting = lookupBatch.get(path)
+    if (waiting) waiting.push(resolve)
+    else lookupBatch.set(path, [resolve])
+  })
+}
+
+async function sendLookups() {
+  const batch = lookupBatch
+  lookupBatch = null
+  const paths = [...batch.keys()]
+  const results = await window.folio.getThumbnails(paths).catch(() => paths.map(() => null))
+  paths.forEach((p, i) => { for (const resolve of batch.get(p)) resolve(results[i]) })
+}
+
+// Generated thumbnails are saved in batches too, gathered over a short window
+const SAVE_BATCH_MS = 40
+let saveBatch = null // [{ file, bytes, resolve }]
+
+function saveThumbnail(file, bytes) {
+  return new Promise((resolve) => {
+    if (!saveBatch) {
+      saveBatch = []
+      setTimeout(sendSaves, SAVE_BATCH_MS)
+    }
+    saveBatch.push({ file, bytes, resolve })
+  })
+}
+
+async function sendSaves() {
+  const batch = saveBatch
+  saveBatch = null
+  const urls = await window.folio.saveThumbnails(batch)
+  batch.forEach((it, i) => it.resolve(urls[i]))
+}
+
 async function start(path, req) {
-  const res = await window.folio.getThumbnail(path)
+  const res = await lookup(path)
+  if (res?.url) return finish(path, req, res.url) // a cache hit is worth remembering even if nobody waits
   if (req.listeners.size === 0) { // scrolled away meanwhile
     if (requests.get(path) === req) requests.delete(path)
     return
   }
   if (!res) return finish(path, req, null)
-  if (res.url) return finish(path, req, res.url)
   req.job = {
+    req,
+    // Resolves once the worker is done, so it takes the next job while the save is
+    // still waiting for its batch
     run: async (worker) => {
       req.job = null
-      let url = null
-      try {
-        const bytes = await window.folio.readImageBytes(path)
-        const result = bytes && await runOnWorker(worker, bytes, {
-          kind: 'thumb', size: THUMB_SIZE, maxLongSide: MAX_LONG_SIDE, mime: 'image/webp', quality: WEBP_QUALITY,
-        }, JOB_TIMEOUT_MS)
-        url = result?.out ? await window.folio.saveThumbnail(res.file, result.out) : null
-      } catch {}
-      finish(path, req, url)
+      const result = await runOnWorker(worker, path, {
+        kind: 'thumb', size: THUMB_SIZE, maxLongSide: MAX_LONG_SIDE, mime: 'image/webp', quality: WEBP_QUALITY,
+      }, JOB_TIMEOUT_MS).catch(() => null)
+      if (!result?.out) return finish(path, req, null)
+      saveThumbnail(res.file, result.out).then((url) => finish(path, req, url))
     },
   }
   thumbQueue.push(req.job)
@@ -121,8 +215,9 @@ async function start(path, req) {
 
 // Ask for a thumbnail; onReady(url | null) is called once. The returned function
 // cancels the request: a thumbnail still waiting in the queue is dropped (one already
-// being generated finishes and is cached, but nobody is notified).
-export function requestThumbnail(path, onReady) {
+// being generated finishes and is cached, but nobody is notified). onScreen requests
+// are generated first; setThumbnailOnScreen updates that as the grid scrolls.
+export function requestThumbnail(path, onReady, onScreen = true) {
   // SVGs are vectors (and can't be decoded in a worker): show the file itself
   if (/\.svg$/i.test(path)) {
     let cancelled = false
@@ -131,10 +226,10 @@ export function requestThumbnail(path, onReady) {
   }
   let req = requests.get(path)
   if (!req) {
-    req = { listeners: new Set(), job: null }
+    req = { listeners: new Set(), job: null, onScreen }
     requests.set(path, req)
     start(path, req)
-  }
+  } else if (onScreen) req.onScreen = true
   req.listeners.add(onReady)
   return () => {
     req.listeners.delete(onReady)
@@ -146,6 +241,11 @@ export function requestThumbnail(path, onReady) {
   }
 }
 
+export function setThumbnailOnScreen(path, onScreen) {
+  const req = requests.get(path)
+  if (req) req.onScreen = onScreen
+}
+
 // ── Bulk resize ─────────────────────────────────────────────────────────────
 // opts: { scale } or { maxSide }, plus mime and quality (0–1).
 // Resolves { out, width, height } | { unchanged: true } | null on failure.
@@ -155,8 +255,7 @@ export function resizeImage(path, opts) {
       bulk: true,
       run: async (worker) => {
         try {
-          const bytes = await window.folio.readImageBytes(path)
-          resolve(bytes ? await runOnWorker(worker, bytes, { kind: 'resize', ...opts }, BULK_TIMEOUT_MS) : null)
+          resolve(await runOnWorker(worker, path, { kind: 'resize', ...opts }, BULK_TIMEOUT_MS))
         } catch {
           resolve(null)
         }
