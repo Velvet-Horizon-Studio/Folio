@@ -169,15 +169,15 @@ async function sendLookups() {
 
 // Generated thumbnails are saved in batches too, gathered over a short window
 const SAVE_BATCH_MS = 40
-let saveBatch = null // [{ file, bytes, resolve }]
+let saveBatch = null // [{ path, token, bytes, resolve }]
 
-function saveThumbnail(file, bytes) {
+function saveThumbnail(path, token, bytes) {
   return new Promise((resolve) => {
     if (!saveBatch) {
       saveBatch = []
       setTimeout(sendSaves, SAVE_BATCH_MS)
     }
-    saveBatch.push({ file, bytes, resolve })
+    saveBatch.push({ path, token, bytes, resolve })
   })
 }
 
@@ -206,7 +206,7 @@ async function start(path, req) {
         kind: 'thumb', size: THUMB_SIZE, maxLongSide: MAX_LONG_SIDE, mime: 'image/webp', quality: WEBP_QUALITY,
       }, JOB_TIMEOUT_MS).catch(() => null)
       if (!result?.out) return finish(path, req, null)
-      saveThumbnail(res.file, result.out).then((url) => finish(path, req, url))
+      saveThumbnail(path, res.token, result.out).then((url) => finish(path, req, url))
     },
   }
   thumbQueue.push(req.job)

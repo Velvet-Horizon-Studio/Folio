@@ -9,6 +9,9 @@ import { forgetThumbnails } from './thumbnails'
 import './styles/App.css'
 
 
+// Compare paths the way Windows does: separators, trailing slash and case don't matter
+const normPath = (p) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+
 function shuffle(arr) {
   const a = [...arr]
   for (let i = a.length - 1; i > 0; i--) {
@@ -44,6 +47,10 @@ export default function App() {
   // Refs kept in sync so IPC callbacks (set up once) always see current values
   const imagesRef = useRef([])
   const currentIndexRef = useRef(0)
+  const foldersRef = useRef([])
+  // An image dropped on the window, shown as soon as it's in the list (its folder may
+  // still be scanning): { path, until }. Dropped if it doesn't show up within 10 s.
+  const pendingJumpRef = useRef(null)
   const [controlsVisible, setControlsVisible] = useState(true)
   const [helpText, setHelpText] = useState(null)
   const [thumbReloadKey, setThumbReloadKey] = useState(0)
@@ -99,6 +106,18 @@ export default function App() {
   }, [keepAwake, isPlaying])
 
   useEffect(() => { imagesRef.current = images }, [images])
+  useEffect(() => { foldersRef.current = folders }, [folders])
+
+  // Index of the pending dropped image in `list` (and clear it), or -1
+  function takePendingJump(list) {
+    const pending = pendingJumpRef.current
+    if (!pending) return -1
+    if (Date.now() > pending.until) { pendingJumpRef.current = null; return -1 }
+    const target = normPath(pending.path)
+    const idx = list.findIndex((img) => normPath(img.path) === target)
+    if (idx >= 0) pendingJumpRef.current = null
+    return idx
+  }
   useEffect(() => { currentIndexRef.current = currentIndex }, [currentIndex])
   useEffect(() => { startupBehaviorRef.current = startupBehavior }, [startupBehavior])
 
@@ -144,7 +163,10 @@ export default function App() {
       const behavior = startupBehaviorRef.current
       const savedPath = lastImagePathRef.current
       lastImagePathRef.current = null
-      if (behavior === 'resume' && savedPath) {
+      const dropped = takePendingJump(list)
+      if (dropped >= 0) {
+        setCurrentIndex(dropped)
+      } else if (behavior === 'resume' && savedPath) {
         const norm = (p) => p.replace(/\\/g, '/').toLowerCase()
         const idx = list.findIndex((img) => norm(img.path) === norm(savedPath))
         setCurrentIndex(idx >= 0 ? idx : 0)
@@ -179,7 +201,8 @@ export default function App() {
       const merged = [...kept, ...added]
 
       setImages(merged)
-      const newIdx = merged.findIndex((img) => img.path === currentPath)
+      const dropped = takePendingJump(merged) // a dropped file the watcher just picked up
+      const newIdx = dropped >= 0 ? dropped : merged.findIndex((img) => img.path === currentPath)
       setCurrentIndex(newIdx >= 0 ? newIdx : Math.min(currentIndexRef.current, Math.max(0, merged.length - 1)))
     })
     return unsubscribe
@@ -290,9 +313,11 @@ export default function App() {
     setHelpText(text ?? 'Help content is unavailable.')
   }, [])
 
-  // Reload thumbnails: clear the cache and bump the key so every item re-fetches
+  // Reload thumbnails: delete the loaded folders' thumbnail files and bump the key so
+  // every item re-fetches
   const handleReloadThumbnails = useCallback(async () => {
-    try { await window.folio.reloadThumbnails() } catch {}
+    const active = foldersRef.current.filter((f) => f.active).map((f) => f.path)
+    try { await window.folio.reloadThumbnails(active) } catch {}
     forgetThumbnails()
     setThumbReloadKey((k) => k + 1)
   }, [])
@@ -407,17 +432,41 @@ export default function App() {
     hideTimerRef.current = setTimeout(() => setControlsVisible(false), 5000)
   }, [isFullscreen])
 
-  // Folders dragged in from Explorer. Drops arrive as native window events (the
-  // webview's HTML5 drop events carry no file paths); files are ignored.
-  useEffect(() => window.folio.onFolderDrag((e) => {
-    if (e.type === 'enter') setIsDragging(true)
-    else if (e.type === 'leave') setIsDragging(false)
-    else if (e.type === 'drop') {
-      setFolders((prev) => {
-        const existing = new Set(prev.map((f) => f.path))
-        const toAdd = e.folders.filter((p) => !existing.has(p)).map((p) => ({ path: p, active: true }))
-        return [...prev, ...toAdd]
-      })
+  // Folders and pictures dragged in from Explorer. Drops arrive as native window
+  // events (the webview's HTML5 drop events carry no file paths). Dropped folders are
+  // added. A dropped picture is shown in the viewer: its folder is added (or switched
+  // back on) if needed, so its neighbours are an arrow key away. Other files are ignored.
+  useEffect(() => window.folio.onDrop((e) => {
+    if (e.type === 'enter') { setIsDragging(true); return }
+    if (e.type === 'leave') { setIsDragging(false); return }
+
+    const prev = foldersRef.current
+    const next = [...prev]
+    const index = new Map(prev.map((f, i) => [normPath(f.path), i]))
+    const want = (path, activate) => {
+      const i = index.get(normPath(path))
+      if (i === undefined) {
+        index.set(normPath(path), next.length)
+        next.push({ path, active: true })
+      } else if (activate && !next[i].active) {
+        next[i] = { ...next[i], active: true }
+      }
+    }
+    for (const path of e.folders) want(path, false)
+    for (const img of e.images) want(img.folder, true)
+
+    const target = e.images[0]?.path
+    const changed = next.length !== prev.length || next.some((f, i) => f !== prev[i])
+    if (target) {
+      pendingJumpRef.current = { path: target, until: Date.now() + 10000 }
+      setIsPlaying(false)
+    }
+    if (changed) {
+      setFolders(next) // the rescan shows the dropped picture
+    } else if (target) {
+      // Its folder is already showing: jump now (or when the watcher adds a new file)
+      const idx = takePendingJump(imagesRef.current)
+      if (idx >= 0) setCurrentIndex(idx)
     }
   }), [])
 
@@ -438,7 +487,7 @@ export default function App() {
         <div className="drop-overlay">
           <div className="drop-overlay-box">
             <div className="drop-overlay-icon">📁</div>
-            <div className="drop-overlay-text">Drop folders to add</div>
+            <div className="drop-overlay-text">Drop a picture to view it, or folders to add</div>
           </div>
         </div>
       )}
@@ -457,7 +506,7 @@ export default function App() {
             <div className="app-brand">
               <div className="app-name-row">
                 <span className="app-title">Folio</span>
-                <span className="app-version">v.1.2.1</span>
+                <span className="app-version">v.1.2.2</span>
               </div>
               <div className="app-tagline">Your images, beautifully kept.</div>
             </div>

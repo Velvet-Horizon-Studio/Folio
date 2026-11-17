@@ -11,6 +11,7 @@ use rayon::prelude::*;
 use serde::Serialize;
 use serde_json::Value;
 use std::{
+    collections::HashMap,
     fs,
     io::Cursor,
     path::{Path, PathBuf},
@@ -128,14 +129,53 @@ async fn select_folder(app: AppHandle) -> Option<String> {
 }
 
 #[tauri::command]
-async fn scan_images(folders: Vec<String>) -> Vec<ImageEntry> {
-    tauri::async_runtime::spawn_blocking(move || scan_all(&folders)).await.unwrap_or_default()
+async fn scan_images(folders: Vec<String>, cache: State<'_, Arc<ThumbCache>>) -> Res<Vec<ImageEntry>> {
+    let scanned = folders.clone();
+    let images = tauri::async_runtime::spawn_blocking(move || scan_all(&scanned)).await.map_err(err)?;
+    // Afterwards, drop the thumbnails of images no longer in these folders (every
+    // folder, including those with no images left)
+    let cache = cache.inner().clone();
+    let listing = images.clone();
+    std::thread::spawn(move || {
+        let mut names: HashMap<&str, Vec<String>> = folders.iter().map(|f| (f.as_str(), Vec::new())).collect();
+        for img in &listing {
+            if let (Some(list), Some(n)) = (names.get_mut(img.folder.as_str()), Path::new(&img.path).file_name()) {
+                list.push(n.to_string_lossy().into_owned());
+            }
+        }
+        for (folder, files) in names {
+            cache.tidy(Path::new(folder), &files);
+        }
+    });
+    Ok(images)
 }
 
-// Paths dropped on the window that are folders
+#[derive(Serialize)]
+struct DroppedImage {
+    path: String,
+    folder: String, // its parent folder, the form scan_images reports it in
+}
+
+#[derive(Serialize)]
+struct DropContents {
+    folders: Vec<String>,
+    images: Vec<DroppedImage>,
+}
+
+// Paths dropped on the window: the folders, and the image files (other files are
+// ignored)
 #[tauri::command]
-fn filter_directories(paths: Vec<String>) -> Vec<String> {
-    paths.into_iter().filter(|p| Path::new(p).is_dir()).collect()
+fn classify_drop(paths: Vec<String>) -> DropContents {
+    let mut out = DropContents { folders: vec![], images: vec![] };
+    for p in paths {
+        let path = Path::new(&p);
+        if path.is_dir() {
+            out.folders.push(p);
+        } else if path.is_file() && is_image(path) {
+            out.images.push(DroppedImage { folder: parent(path).to_string_lossy().into_owned(), path: p });
+        }
+    }
+    out
 }
 
 #[tauri::command]
@@ -161,23 +201,25 @@ fn watch_folders(folders: Vec<String>, watch: State<'_, FolderWatch>) {
 #[serde(rename_all = "camelCase")]
 enum ThumbLookup {
     Cached(String),
-    File(String),
+    Missing(String),
 }
 
-// For each path: { cached } when a thumbnail exists, { file } (where to save one) when
-// it must be generated, null when the image itself can't be read. Batched because
-// each IPC call costs the webview's UI thread a few ms, and scrolling the grid mounts
-// many thumbnails per frame.
+// For each path: { cached: token } when the folder's thumbnail file has a current
+// thumbnail (served at thumb://<path>), { missing: token } when one must be generated
+// and saved with that token, null when the image itself can't be read. Batched
+// because each IPC call costs the webview's UI thread a few ms, and scrolling the
+// grid mounts many thumbnails per frame.
 #[tauri::command]
 async fn get_thumbnails(paths: Vec<String>, cache: State<'_, Arc<ThumbCache>>) -> Res<Vec<Option<ThumbLookup>>> {
     let cache = cache.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        paths
-            .par_iter()
-            .map(|path| {
-                cache.lookup(path).map(|l| match l {
-                    Lookup::Cached(p) => ThumbLookup::Cached(p.to_string_lossy().into_owned()),
-                    Lookup::Missing(p) => ThumbLookup::File(p.to_string_lossy().into_owned()),
+        cache
+            .lookup_many(&paths)
+            .into_iter()
+            .map(|l| {
+                l.map(|l| match l {
+                    Lookup::Cached(v) => ThumbLookup::Cached(v.token()),
+                    Lookup::Missing(v) => ThumbLookup::Missing(v.token()),
                 })
             })
             .collect()
@@ -186,10 +228,12 @@ async fn get_thumbnails(paths: Vec<String>, cache: State<'_, Arc<ThumbCache>>) -
     .map_err(err)
 }
 
+// F5: deletes the thumbnail files of these folders
 #[tauri::command]
-fn clear_thumbnail_cache(cache: State<'_, Arc<ThumbCache>>) -> bool {
-    cache.clear();
-    true
+async fn clear_thumbnail_cache(folders: Vec<String>, cache: State<'_, Arc<ThumbCache>>) -> Res<bool> {
+    let cache = cache.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || cache.clear(&folders)).await.map_err(err)?;
+    Ok(true)
 }
 
 // Raw file bytes for renderer-side (Chromium) decoding, sent as an ArrayBuffer
@@ -199,31 +243,46 @@ async fn read_image_bytes(path: String) -> Res<Response> {
     Ok(Response::new(bytes))
 }
 
-// Several generated thumbnails in one call (batched like get_thumbnails).
-// Body: their WebP bytes, concatenated. Header x-files: JSON [[cache path from
-// get_thumbnails, byte length], ...] in body order. Returns each saved path or null.
+// Several generated thumbnails in one call (batched like get_thumbnails), stored in
+// their folders' thumbnail files. Body: their WebP bytes, concatenated. Header
+// x-files: JSON [[image path, token from get_thumbnails, byte length], ...] in body
+// order. Returns each stored thumbnail's token, or null.
 #[tauri::command]
 async fn save_thumbnails(request: Request<'_>, cache: State<'_, Arc<ThumbCache>>) -> Res<Vec<Option<String>>> {
-    let files: Vec<(String, usize)> =
+    let files: Vec<(String, String, usize)> =
         serde_json::from_str(&header(&request, "x-files").ok_or("missing x-files")?).map_err(err)?;
     let body = raw_body(&request)?;
-    if files.iter().map(|(_, len)| len).sum::<usize>() != body.len() {
+    if files.iter().map(|(_, _, len)| len).sum::<usize>() != body.len() {
         return Err("x-files lengths don't match the body".into());
     }
     let cache = cache.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let mut offset = 0;
-        files
-            .iter()
-            .map(|(file, len)| {
+        let items = files
+            .into_iter()
+            .map(|(path, token, len)| {
                 let bytes = &body[offset..offset + len];
                 offset += len;
-                cache.save(file, bytes).map(|p| p.to_string_lossy().into_owned())
+                (path, token, bytes)
             })
-            .collect()
+            .collect();
+        cache.save_many(items)
     })
     .await
     .map_err(err)
+}
+
+// thumb://<percent-encoded image path>: the image's thumbnail from its folder's
+// thumbnail file (the query string, a version token, only busts the webview's cache)
+fn serve_thumbnail(app: &AppHandle, request: &tauri::http::Request<Vec<u8>>) -> tauri::http::Response<Vec<u8>> {
+    let path = percent_decode_str(request.uri().path().trim_start_matches('/')).decode_utf8_lossy().into_owned();
+    let bytes = app.state::<Arc<ThumbCache>>().read(Path::new(&path));
+    let builder = tauri::http::Response::builder().header("Access-Control-Allow-Origin", "*");
+    match bytes {
+        Some(b) => builder.status(200).header("Content-Type", "image/webp").body(b),
+        None => builder.status(404).body(Vec::new()),
+    }
+    .unwrap()
 }
 
 // ── Editing and file operations ──────────────────────────────────────────────
@@ -500,7 +559,7 @@ fn get_readme() -> &'static str {
 
 fn data_dir(app: &AppHandle) -> PathBuf {
     // %APPDATA%\Folio is where Folio 1.1 (Electron) kept its data: using it keeps
-    // folders, settings and the thumbnail cache on upgrade.
+    // folders and settings on upgrade.
     // FOLIO_DATA_DIR overrides it (automated tests use a scratch folder).
     if let Some(d) = std::env::var_os("FOLIO_DATA_DIR") {
         return PathBuf::from(d);
@@ -514,6 +573,10 @@ fn data_dir(app: &AppHandle) -> PathBuf {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .register_asynchronous_uri_scheme_protocol("thumb", |ctx, request, responder| {
+            let app = ctx.app_handle().clone();
+            tauri::async_runtime::spawn_blocking(move || responder.respond(serve_thumbnail(&app, &request)));
+        })
         .setup(|app| {
             let handle = app.handle().clone();
             let data = data_dir(&handle);
@@ -527,7 +590,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             select_folder,
             scan_images,
-            filter_directories,
+            classify_drop,
             load_config,
             save_config,
             watch_folders,

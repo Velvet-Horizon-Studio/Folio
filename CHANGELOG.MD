@@ -4,6 +4,16 @@ All notable changes to Folio are documented here.
 
 ---
 
+## [1.2.2] — 2026-11-17
+
+### Changed
+- **Thumbnails are kept with your pictures.** Each folder now stores its thumbnails in one hidden file, `Folio.thumbs`, next to the pictures, instead of thousands of separate files in `%APPDATA%\Folio\thumbnails`. The old files there are deleted, and thumbnails are made again the first time you browse each folder. Renaming, moving or deleting pictures in Folio keeps the file up to date, and thumbnails of pictures that are gone are cleared out automatically. Folders Folio can't write to (read-only drives, protected folders) keep their thumbnail file in `%APPDATA%\Folio\thumbnails`. F5 rebuilds the thumbnails of the loaded folders.
+
+### Added
+- **Drop a picture on the window to open it.** Drag an image from Explorer onto Folio and it shows in the viewer. If its folder isn't loaded yet (or is switched off), Folio adds it, so the pictures next to it are an arrow key away. Dropping folders still adds them.
+
+---
+
 ## [1.2.1] — 2026-11-15
 
 ### Improved

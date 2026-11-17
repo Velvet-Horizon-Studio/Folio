@@ -37,11 +37,20 @@ images speak for themselves.
   THUMBNAIL BROWSER
   -----------------
   A collapsible sidebar shows every image as a thumbnail, grouped by folder.
-  The grid is lazy-loaded — thumbnails are generated on demand and cached to
-  disk, so the second time you open a folder they appear immediately without
-  any waiting. You can resize the sidebar and adjust thumbnail size with a
-  slider at the bottom of the panel. The active image is always highlighted
-  and kept in view as the slideshow advances.
+  The grid is lazy-loaded — thumbnails are generated on demand and saved, so
+  the second time you open a folder they appear immediately without any
+  waiting. You can resize the sidebar and adjust thumbnail size with a slider
+  at the bottom of the panel. The active image is always highlighted and kept
+  in view as the slideshow advances.
+
+  Each folder keeps its thumbnails in a single hidden file, Folio.thumbs,
+  next to its pictures, so they travel with the folder. Renaming, moving and
+  deleting pictures in Folio keeps it up to date, and thumbnails of pictures
+  that are gone are cleared out automatically. Folders Folio can't write to
+  (a read-only drive, a protected system folder) keep their thumbnail file in
+  %APPDATA%\Folio\thumbnails instead. Press F5 to rebuild the thumbnails of
+  the loaded folders. Deleting a Folio.thumbs file is always safe: Folio
+  simply makes the thumbnails again.
 
   Click any thumbnail to jump straight to that image in the viewer. Ctrl-click
   to build a multi-selection for bulk operations.
@@ -147,6 +156,11 @@ images speak for themselves.
   Right-click any folder and choose Move all to to move every image inside
   it to another loaded folder in a single operation.
 
+  Drag folders from Explorer onto the window to add them. Drop a picture
+  instead to open it in the viewer: its folder is added (or switched back on)
+  if it isn't showing already, so the pictures next to it are one arrow key
+  away.
+
   PERSISTENT SETTINGS
   -------------------
   Folio saves its state when you close it and restores everything when you
@@ -194,7 +208,8 @@ images speak for themselves.
     Right-click thumb   Open the file menu (Copy, Edit / Adjust, Convert, Move)
     Right-click folder  Open the folder menu (Move all to)
     Drag ⠿ handle       Reorder folders in the sidebar
-    Drag from Explorer  Drop folders onto the window to add them
+    Drag from Explorer  Drop folders onto the window to add them, or a
+                        picture to open it
 
 
 --------------------------------------------------------------------------------
@@ -211,12 +226,13 @@ images speak for themselves.
   ------------
   There is no installer. Download Folio_x.x.x_Portable.exe (about 7 MB), place
   it anywhere you like — your Desktop, a folder, or a USB drive — and
-  double-click to run. Folio writes its settings and thumbnail cache to
-  %APPDATA%\Folio and leaves the rest of your system untouched. Upgrading from
-  Folio 1.1 keeps your folders, settings and thumbnails.
+  double-click to run. Folio writes its settings to %APPDATA%\Folio, and a
+  hidden Folio.thumbs thumbnail file in each folder you browse. Upgrading keeps
+  your folders and settings.
 
   To uninstall, delete the .exe file. To also remove its data, delete
-  %APPDATA%\Folio and %LOCALAPPDATA%\com.velvethorizon.folio.
+  %APPDATA%\Folio, %LOCALAPPDATA%\com.velvethorizon.folio and the Folio.thumbs
+  files in your picture folders.
 
 
 --------------------------------------------------------------------------------
@@ -228,7 +244,8 @@ images speak for themselves.
   Packaging     Single portable .exe
   Clipboard     Win32 clipboard API (CF_HDROP)
   Metadata      PNG text chunk parser (Rust)
-  Thumbnails    Web Workers (decode, resize, WebP) + SHA-1 disk cache
+  Thumbnails    Web Workers (decode, resize, WebP), one Folio.thumbs file
+                per folder
   Adjustments   WebGL2 shader with a guided-filter local tone map
 
 

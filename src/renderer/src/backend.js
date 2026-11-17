@@ -9,6 +9,10 @@ import { getCurrentWebview } from '@tauri-apps/api/webview'
 // URL the page can load a local file from (served by the asset protocol)
 export const fileUrl = (path) => convertFileSrc(path)
 
+// An image's thumbnail, served from its folder's thumbnail file. The version token
+// changes when the image does, so the webview never shows a stale cached copy.
+const thumbUrl = (path, token) => `${convertFileSrc(path, 'thumb')}?v=${encodeURIComponent(token)}`
+
 // Commands reject with a plain string; the renderer expects Error objects (err.message)
 const call = (cmd, args, options) =>
   invoke(cmd, args, options).catch((e) => { throw e instanceof Error ? e : new Error(String(e)) })
@@ -40,19 +44,23 @@ window.folio = {
 
   // One result per path: { url } when cached, { file } (the cache path to fill) when
   // not, null if unreadable
+  // Thumbnails live in a file per folder and load through the thumb:// protocol.
+  // One result per path: { url } when cached, { token } (pass it to saveThumbnails)
+  // when one must be generated, null if the image is unreadable.
   getThumbnails: async (paths) =>
-    (await call('get_thumbnails', { paths })).map((r) =>
-      !r ? null : r.cached ? { url: convertFileSrc(r.cached) } : { file: r.file }),
-  // items: [{ file (from getThumbnails), bytes: ArrayBuffer }] → one URL (or null) each
+    (await call('get_thumbnails', { paths })).map((r, i) =>
+      !r ? null : r.cached ? { url: thumbUrl(paths[i], r.cached) } : { token: r.missing }),
+  // items: [{ path, token (from getThumbnails), bytes: ArrayBuffer }] → one URL (or null) each
   saveThumbnails: async (items) => {
     const body = new Uint8Array(items.reduce((n, it) => n + it.bytes.byteLength, 0))
     let offset = 0
     for (const it of items) { body.set(new Uint8Array(it.bytes), offset); offset += it.bytes.byteLength }
-    const files = JSON.stringify(items.map((it) => [it.file, it.bytes.byteLength]))
+    const files = JSON.stringify(items.map((it) => [it.path, it.token, it.bytes.byteLength]))
     const saved = await callRaw('save_thumbnails', body, { 'x-files': files }).catch(() => items.map(() => null))
-    return saved.map((p) => (p ? convertFileSrc(p) : null))
+    return saved.map((token, i) => (token ? thumbUrl(items[i].path, token) : null))
   },
-  reloadThumbnails: () => call('clear_thumbnail_cache'),
+  // Deletes these folders' thumbnail files
+  reloadThumbnails: (folders) => call('clear_thumbnail_cache', { folders }),
   readImageBytes: (path) => call('read_image_bytes', { path }).then((b) => new Uint8Array(b)).catch(() => null),
 
   saveEditedImage: (sourcePath, bytes, ext, mode, suffix) =>
@@ -81,16 +89,17 @@ window.folio = {
     }))
   },
 
-  // Folder drops from Explorer: { type: 'enter' | 'leave' } while dragging over the
-  // window, then { type: 'drop', folders } with the dropped paths that are folders
-  onFolderDrag: (callback) => subscription(() => getCurrentWebview().onDragDropEvent(async (e) => {
+  // Drops from Explorer: { type: 'enter' | 'leave' } while dragging over the window,
+  // then { type: 'drop', folders, images } with the dropped folders and image files
+  // (images as { path, folder }; other files are ignored)
+  onDrop: (callback) => subscription(() => getCurrentWebview().onDragDropEvent(async (e) => {
     const p = e.payload
     if (p.type === 'enter') callback({ type: 'enter' })
     else if (p.type === 'leave') callback({ type: 'leave' })
     else if (p.type === 'drop') {
       callback({ type: 'leave' })
-      const folders = await call('filter_directories', { paths: p.paths })
-      if (folders.length) callback({ type: 'drop', folders })
+      const { folders, images } = await call('classify_drop', { paths: p.paths })
+      if (folders.length || images.length) callback({ type: 'drop', folders, images })
     }
   })),
 }
