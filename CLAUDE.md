@@ -25,6 +25,7 @@ src-tauri/
   src/main.rs       ← every command: scan, config, dialogs, file ops, convert, metadata, clipboard, keep-awake
   src/thumbs.rs     ← thumbnail packs (one Folio.thumbs per folder)
   src/png.rs        ← PNG text-chunk copy + Stable Diffusion parameter parsing
+  src/meta.rs       ← text metadata (PNG text, EXIF, XMP, JPEG comments) without decoding pixels + the search index
   src/watch.rs      ← debounced folder watcher (notify) → "images-updated" event
 
 src/renderer/src/
@@ -64,8 +65,11 @@ Components only call `window.folio.*` (set up by `backend.js`, imported first in
 | `transition` / `transitionDuration` | Transition effect |
 | `startupBehavior` | `'resume'` \| `'first'` \| `'last'` |
 | `sidebarTab` / `sidebarWidth` / `thumbSize` | UI layout |
+| `searchQuery` / `matches` | Metadata search: the query, and the `Set` of matching paths (`null` when not searching) |
 
 `imagesRef` and `currentIndexRef` are kept in sync with their state counterparts so event callbacks (set up once) always see current values.
+
+While `matches` is set, the grid shows only the matches, and `stepIndex()` makes arrow keys, the slideshow and preloading skip the rest; the counters show the position among the matches (`viewIndex` / `viewTotal`). When a search's results don't include the current image, the viewer goes to the first match.
 
 `startupBehaviorRef` is a ref kept in sync with `startupBehavior` state so the async scan callback always reads the current value without being in the dependency array.
 
@@ -116,7 +120,8 @@ F5 (`clear_thumbnail_cache`) deletes the packs of the active folders.
 | `rename_image` / `move_image` / `move_images_bulk` | Rename/move, carrying the cache entry; bulk returns `{ sourcePath, destPath, ok, error? }[]` |
 | `convert_image` / `convert_images_bulk` | Re-encode to PNG or JPEG q92 (alpha onto white) with the `image` crate: PNG, JPEG, WebP, GIF, BMP, TIFF input |
 | `copy_image` | CF_HDROP file drop on the clipboard (Win32, `clipboard-win`) |
-| `get_image_metadata` | Size, dates, dimensions (`imagesize`, header only) and parsed SD parameters from the PNG `parameters` tEXt chunk |
+| `get_image_metadata` | Size, dates, dimensions (`imagesize`, header only), parsed SD parameters (PNG `parameters` chunk, or an A1111 EXIF user comment in JPEG/WebP) and `fields`: other text metadata as `[label, value]` pairs (`meta.rs`) |
+| `search_images` | Indexes into `paths` of the images whose file name, dimensions or text metadata contain every query term (`"phrase"`, `-exclude`, case-insensitive). `meta.rs` reads only the metadata blocks (PNG chunks are skipped by seeking, JPEG stops at SOS), and keeps each image's lowercased search text in memory while its size and mtime match (≤ 64 KB per image; ComfyUI JSON reduced to its strings). An empty query warms the index (the search box does this on focus) and forgets unlisted paths |
 | `save_text_file` | Save dialog + write |
 | `set_prevent_sleep` | Keep the display awake (power request, `keepawake`) |
 | `get_readme` | README.MD, compiled into the exe (in-app help) |
@@ -127,6 +132,7 @@ F5 (`clear_thumbnail_cache`) deletes the packs of the active folders.
 |---|---|
 | `←` / `→` | Previous / next image |
 | `Space` | Toggle play/pause (ignored when input focused) |
+| `Ctrl+F` | Focus the metadata search (Escape in it clears it, never closes the window) |
 | `Escape` | Exit fullscreen (or close window if not fullscreen) |
 | Double-click image | Toggle fullscreen |
 | Scroll wheel | Zoom in/out (25%–500%) |

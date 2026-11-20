@@ -78,8 +78,9 @@ images speak for themselves.
   AI IMAGE METADATA
   -----------------
   Folio reads the generation parameters that Stable Diffusion and compatible
-  tools embed directly inside PNG files. Click the info button on any thumbnail
-  to open a metadata panel showing:
+  tools embed inside PNG files (and inside JPEG and WebP files, where
+  Automatic1111 stores them in the EXIF user comment). Click the info button
+  on any thumbnail to open a metadata panel showing:
 
     - Positive prompt
     - Negative prompt
@@ -88,6 +89,34 @@ images speak for themselves.
 
   You can select and copy any part of the text directly, or save the full
   parameter block to a .txt file with a single click.
+
+  The panel also lists the picture's other metadata: camera make and model,
+  date taken, lens, title, description, keywords, author, copyright, comments
+  and the software that made it (from EXIF, XMP, Windows' file properties and
+  PNG text). ComfyUI pictures show the size of their embedded prompt and
+  workflow.
+
+  SEARCH
+  ------
+  The search box above the Folders and Browse buttons finds pictures by their
+  metadata: prompts and negative prompts, generation settings (sampler, model,
+  seed…), ComfyUI prompts, camera and lens, date taken, titles, keywords,
+  descriptions and comments, plus the file name and dimensions (for example
+  1024x768). Press Ctrl+F to jump to it.
+
+  Results show in the Browse grid as you type, and the viewer, the arrow keys
+  and the slideshow stay within them; the counter shows your position among
+  the matches. Every word must match, in any order and regardless of case.
+  Put a phrase in "quotes" to match it as written, and put - before a word to
+  leave out pictures containing it:
+
+    fox castle          pictures mentioning both fox and castle
+    "red hat" -blurry   the phrase red hat, without blurry
+    canon 2024:07       Canon pictures taken in July 2024
+
+  Press Escape (or click ✕) to clear the search. The first search of a large
+  folder reads each picture's metadata once, which takes a moment; after
+  that, searching is instant.
 
   FILE MANAGEMENT
   ---------------
@@ -189,6 +218,7 @@ images speak for themselves.
                  image editor.
     Enter        Confirm an inline rename
     Escape       Cancel an inline rename
+    Ctrl+F       Search metadata (Escape clears the search)
 
   Arrow and Space shortcuts are ignored while you are typing in a text field
   (for example, renaming an image).

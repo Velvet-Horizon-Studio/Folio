@@ -1267,9 +1267,10 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "folio"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "clipboard-win",
+ "flate2",
  "hex",
  "humantime",
  "image",

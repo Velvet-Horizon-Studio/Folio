@@ -12,6 +12,19 @@ import './styles/App.css'
 // Compare paths the way Windows does: separators, trailing slash and case don't matter
 const normPath = (p) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
 
+// Index of the next image in direction dir (±1), skipping images outside the search
+// results (matches: Set of paths, or null when not searching)
+function stepIndex(list, matches, i, dir) {
+  const n = list.length
+  if (n === 0) return 0
+  if (!matches) return (((i + dir) % n) + n) % n
+  for (let k = 1; k <= n; k++) {
+    const j = (((i + dir * k) % n) + n) % n
+    if (matches.has(list[j].path)) return j
+  }
+  return i
+}
+
 function shuffle(arr) {
   const a = [...arr]
   for (let i = a.length - 1; i > 0; i--) {
@@ -57,6 +70,13 @@ export default function App() {
   const [editPath, setEditPath] = useState(null) // image open in the resize/crop editor
   const [editVersions, setEditVersions] = useState({}) // path → bump count after an overwrite
   const hideTimerRef = useRef(null)
+  // Metadata search: the query typed, and the matching paths (null when not searching)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [matches, setMatches] = useState(null)
+  const [searching, setSearching] = useState(false)
+  const matchesRef = useRef(null)
+  const searchSeq = useRef(0)
+  const searchInputRef = useRef(null)
 
   // Load saved config on first mount
   useEffect(() => {
@@ -213,7 +233,7 @@ export default function App() {
     clearInterval(timerRef.current)
     if (isPlaying && images.length > 1) {
       timerRef.current = setInterval(() => {
-        setCurrentIndex((i) => (i + 1) % images.length)
+        setCurrentIndex((i) => stepIndex(imagesRef.current, matchesRef.current, i, 1))
       }, intervalMs)
     }
     return () => clearInterval(timerRef.current)
@@ -274,13 +294,84 @@ export default function App() {
 
   const handlePrev = useCallback(() => {
     setIsPlaying(false)
-    setCurrentIndex((i) => (i - 1 + images.length) % images.length)
-  }, [images.length])
+    setCurrentIndex((i) => stepIndex(imagesRef.current, matchesRef.current, i, -1))
+  }, [])
 
   const handleNext = useCallback(() => {
     setIsPlaying(false)
-    setCurrentIndex((i) => (i + 1) % images.length)
-  }, [images.length])
+    setCurrentIndex((i) => stepIndex(imagesRef.current, matchesRef.current, i, 1))
+  }, [])
+
+  // Search the loaded images' metadata as the query is typed (and again when the list
+  // changes). Only the latest search's result is kept.
+  useEffect(() => {
+    const q = searchQuery.trim()
+    const seq = ++searchSeq.current
+    if (!q) { setMatches(null); setSearching(false); return }
+    setSearching(true)
+    const t = setTimeout(async () => {
+      const list = images
+      let found
+      try {
+        const hits = await window.folio.searchImages(list.map((img) => img.path), q)
+        found = new Set(hits.map((i) => list[i].path))
+      } catch {
+        found = new Set()
+      }
+      if (seq !== searchSeq.current) return
+      setMatches(found)
+      setSearching(false)
+    }, 200)
+    return () => clearTimeout(t)
+  }, [searchQuery, images])
+
+  // The viewer and slideshow stay within the results: if the current image isn't one,
+  // go to the first that is
+  useEffect(() => {
+    matchesRef.current = matches
+    if (!matches || matches.size === 0) return
+    const list = imagesRef.current
+    if (matches.has(list[currentIndexRef.current]?.path)) return
+    const first = list.findIndex((img) => matches.has(img.path))
+    if (first >= 0) setCurrentIndex(first)
+  }, [matches])
+
+  const handleSearchChange = useCallback((e) => {
+    const value = e.target.value
+    setSearchQuery(value)
+    if (value.trim()) setSidebarTab('browse') // the results show in the grid
+  }, [])
+
+  // Focusing the box reads every image's metadata in the background, so the first
+  // search is instant
+  const handleSearchFocus = useCallback(() => {
+    const paths = imagesRef.current.map((img) => img.path)
+    if (paths.length > 0) window.folio.searchImages(paths, '').catch(() => {})
+  }, [])
+
+  const handleSearchKey = useCallback((e) => {
+    if (e.key === 'Escape') {
+      // Clear the search, or leave the box; never close the window from here
+      e.stopPropagation()
+      if (e.target.value) setSearchQuery('')
+      else e.target.blur()
+    } else if (e.key === 'Enter') {
+      e.target.blur() // arrow keys go back to browsing the results
+    }
+  }, [])
+
+  // Ctrl+F: search
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && searchInputRef.current) {
+        e.preventDefault()
+        searchInputRef.current.focus()
+        searchInputRef.current.select()
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
 
   // Arrow keys: cycle images; Space: toggle play
   useEffect(() => {
@@ -472,11 +563,18 @@ export default function App() {
 
   const currentImage = images[currentIndex] || null
   // The images an arrow key or the slideshow shows next, decoded ahead of time
-  const n = images.length
-  const nextPath = n > 1 ? images[(currentIndex + 1) % n]?.path : undefined
-  const prevPath = n > 2 ? images[(currentIndex - 1 + n) % n]?.path : undefined
+  const nextIdx = stepIndex(images, matches, currentIndex, 1)
+  const prevIdx = stepIndex(images, matches, currentIndex, -1)
+  const nextPath = nextIdx !== currentIndex ? images[nextIdx]?.path : undefined
+  const prevPath = prevIdx !== currentIndex && prevIdx !== nextIdx ? images[prevIdx]?.path : undefined
   const preload = useMemo(() => [nextPath, prevPath].filter(Boolean).map((path) => ({ path, version: editVersions[path] })),
     [nextPath, prevPath, editVersions])
+  // While searching, the counters show the position among the results
+  const matchIndexes = useMemo(() => matches
+    ? images.reduce((acc, img, i) => { if (matches.has(img.path)) acc.push(i); return acc }, [])
+    : null, [matches, images])
+  const viewTotal = matchIndexes ? matchIndexes.length : images.length
+  const viewIndex = matchIndexes ? Math.max(0, matchIndexes.indexOf(currentIndex)) : currentIndex
 
   return (
     <div
@@ -506,10 +604,34 @@ export default function App() {
             <div className="app-brand">
               <div className="app-name-row">
                 <span className="app-title">Folio</span>
-                <span className="app-version">v.1.2.2</span>
+                <span className="app-version">v.1.2.3</span>
               </div>
               <div className="app-tagline">Your images, beautifully kept.</div>
             </div>
+            <div className={`sidebar-search${searchQuery ? ' sidebar-search-active' : ''}`}>
+              <span className="sidebar-search-icon">🔍</span>
+              <input
+                ref={searchInputRef}
+                className="sidebar-search-input"
+                type="text"
+                spellCheck={false}
+                placeholder="Search metadata…"
+                title={'Searches file names, prompts and generation settings, camera info, titles, keywords and comments.\nAll words must match. Use "quotes" for a phrase and -word to exclude. Ctrl+F'}
+                value={searchQuery}
+                onChange={handleSearchChange}
+                onFocus={handleSearchFocus}
+                onKeyDown={handleSearchKey}
+              />
+              {searchQuery && (
+                <button className="sidebar-search-clear" onClick={() => setSearchQuery('')} title="Clear search (Esc)">✕</button>
+              )}
+            </div>
+            {searchQuery.trim() && (
+              <div className="sidebar-search-status">
+                {searching && !matches ? 'Searching…'
+                  : `${viewTotal} of ${images.length} image${images.length === 1 ? '' : 's'}${searching ? ' …' : ''}`}
+              </div>
+            )}
             <div className="sidebar-tabs">
               <button
                 className={`stab${sidebarTab === 'folders' ? ' stab-active' : ''}`}
@@ -555,6 +677,8 @@ export default function App() {
               onThumbSizeChange={setThumbSize}
               reloadKey={thumbReloadKey}
               onReload={handleReloadThumbnails}
+              matches={matches}
+              searchQuery={searchQuery.trim()}
             />
           )}
         </aside>
@@ -565,8 +689,8 @@ export default function App() {
           image={currentImage}
           version={currentImage ? editVersions[currentImage.path] : undefined}
           preload={preload}
-          index={currentIndex}
-          total={images.length}
+          index={viewIndex}
+          total={viewTotal}
           transition={transition}
           transitionDuration={transitionDuration}
           isFullscreen={isFullscreen}
@@ -592,8 +716,8 @@ export default function App() {
           onTransitionChange={setTransition}
           transitionDuration={transitionDuration}
           onTransitionDurationChange={setTransitionDuration}
-          currentIndex={currentIndex}
-          total={images.length}
+          currentIndex={viewIndex}
+          total={viewTotal}
         />
 
         {helpText !== null && (

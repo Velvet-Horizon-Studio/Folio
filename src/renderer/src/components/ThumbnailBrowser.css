@@ -508,3 +508,16 @@
   height: 4px;
   cursor: pointer;
 }
+
+/* Other metadata (EXIF, XMP, PNG text): long values scroll */
+.tb-meta-fields td:first-child {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.tb-meta-value {
+  white-space: pre-wrap;
+  max-height: 120px;
+  overflow-y: auto;
+  user-select: text;
+}

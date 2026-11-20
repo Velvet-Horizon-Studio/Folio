@@ -56,21 +56,6 @@ pub fn copy_text_chunks(src: &[u8], out: Vec<u8>) -> Vec<u8> {
     merged
 }
 
-// The tEXt "parameters" value, decoded as Latin-1 like the PNG spec says
-pub fn sd_parameters(buf: &[u8]) -> Option<String> {
-    for (ty, s, e) in chunks(buf) {
-        if ty == b"tEXt" {
-            let data = &buf[s + 8..e - 4];
-            if let Some(nul) = data.iter().position(|&b| b == 0) {
-                if &data[..nul] == b"parameters" {
-                    return Some(data[nul + 1..].iter().map(|&b| b as char).collect());
-                }
-            }
-        }
-    }
-    None
-}
-
 #[derive(Serialize)]
 pub struct SdParams {
     positive: String,

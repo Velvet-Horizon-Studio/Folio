@@ -73,6 +73,8 @@ window.folio = {
   convertImagesBulk: (paths, format) => call('convert_images_bulk', { paths, format }),
   copyImage: (filePath) => call('copy_image', { filePath }),
   getImageMetadata: (filePath) => call('get_image_metadata', { filePath }),
+  // Indexes into paths of the images whose name or metadata match the query
+  searchImages: (paths, query) => call('search_images', { paths, query }),
   saveTextFile: (defaultPath, content) => call('save_text_file', { defaultPath, content }),
 
   setPreventSleep: (enable) => call('set_prevent_sleep', { enable }),

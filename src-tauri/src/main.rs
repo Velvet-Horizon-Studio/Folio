@@ -2,6 +2,7 @@
 // src/renderer/src/backend.js, which exposes them as window.folio.*.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod meta;
 mod png;
 mod thumbs;
 mod watch;
@@ -19,6 +20,7 @@ use std::{
 };
 use tauri::{ipc::Request, ipc::Response, AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
+use meta::SearchIndex;
 use thumbs::{Lookup, ThumbCache};
 use watch::FolderWatch;
 
@@ -498,6 +500,8 @@ struct ImageMetadata {
     created: String,
     modified: String,
     sd: Option<png::SdParams>,
+    // Other text metadata (EXIF, XMP, PNG text): [label, value] pairs
+    fields: Vec<(String, String)>,
 }
 
 fn iso(t: std::io::Result<std::time::SystemTime>) -> String {
@@ -512,11 +516,7 @@ async fn get_image_metadata(file_path: String) -> Res<ImageMetadata> {
         // Header-only read: every format Folio lists, without decoding the pixels
         let (width, height) = imagesize::size(&p).map(|s| (s.width, s.height)).unwrap_or((0, 0));
         let ext = p.extension().map(|e| e.to_string_lossy().into_owned()).unwrap_or_default();
-        let sd = if ext.eq_ignore_ascii_case("png") {
-            fs::read(&p).ok().and_then(|b| png::sd_parameters(&b)).map(|raw| png::parse_sd(&raw))
-        } else {
-            None
-        };
+        let m = meta::read(&p);
         Ok(ImageMetadata {
             name: p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
             ext: ext.to_uppercase(),
@@ -525,11 +525,20 @@ async fn get_image_metadata(file_path: String) -> Res<ImageMetadata> {
             height,
             created: iso(meta.created()),
             modified: iso(meta.modified()),
-            sd,
+            sd: meta::parse_sd(&m),
+            fields: m.fields,
         })
     })
     .await
     .map_err(err)?
+}
+
+// Images whose file name, dimensions or text metadata match the query: indexes into
+// `paths`. Metadata is read once per image and kept while the file is unchanged.
+#[tauri::command]
+async fn search_images(paths: Vec<String>, query: String, index: State<'_, Arc<SearchIndex>>) -> Res<Vec<u32>> {
+    let index = index.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || index.search(&paths, &query)).await.map_err(err)
 }
 
 // ── Window and app ───────────────────────────────────────────────────────────
@@ -585,6 +594,7 @@ fn main() {
             app.manage(Paths { data });
             app.manage(FolderWatch::new(handle));
             app.manage(SleepBlock::default());
+            app.manage(Arc::new(SearchIndex::default()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -608,6 +618,7 @@ fn main() {
             copy_image,
             save_text_file,
             get_image_metadata,
+            search_images,
             set_prevent_sleep,
             get_readme
         ])

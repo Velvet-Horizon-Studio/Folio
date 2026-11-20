@@ -1,6 +1,6 @@
 [package]
 name = "folio"
-version = "1.2.2"
+version = "1.2.3"
 description = "Folio: multi-folder image slideshow and manager"
 authors = ["Velvet Horizon Studio"]
 edition = "2021"
@@ -20,6 +20,8 @@ hex = "0.4"
 humantime = "2"
 percent-encoding = "2"
 regex = "1"
+# Compressed PNG text chunks (already used by the image crate)
+flate2 = "1"
 notify = "8"
 trash = "5"
 imagesize = "0.13"

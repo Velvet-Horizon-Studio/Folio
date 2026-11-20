@@ -43,7 +43,7 @@ function computeLayout(groups, width, thumbSize, count) {
   const cols = Math.max(1, Math.floor((inner + GAP) / (thumbSize + GAP)))
   const cell = Math.max(1, (inner - GAP * (cols - 1)) / cols)
   const blocks = []
-  const topOf = new Float64Array(count)
+  const topOf = new Float64Array(count).fill(-1) // -1: not shown (outside the search results)
   let y = 0
   for (const [folder, items] of groups) {
     blocks.push({ kind: 'label', key: `label|${folder}`, folder, top: y, height: LABEL_H })
@@ -203,7 +203,7 @@ const CONVERT_FORMATS = [
 
 
 
-export default memo(function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDelete, onRename, onMove, onBulkMoved, onEdit, onEditSaved, editVersions, folders, thumbSize, onThumbSizeChange, reloadKey, onReload }) {
+export default memo(function ThumbnailBrowser({ images, currentIndex, onJumpTo, onDelete, onRename, onMove, onBulkMoved, onEdit, onEditSaved, editVersions, folders, thumbSize, onThumbSizeChange, reloadKey, onReload, matches, searchQuery }) {
   const scrollRef = useRef(null)
   const menuRef = useRef(null)
   // Viewport of the scroll area: width (for the columns) and the scroll position,
@@ -227,11 +227,13 @@ export default memo(function ThumbnailBrowser({ images, currentIndex, onJumpTo, 
     return () => clearTimeout(t)
   }, [reloadKey])
 
-  // Images grouped by folder (in folder-list order), each group sorted by path
+  // Images grouped by folder (in folder-list order), each group sorted by path. While
+  // searching, only the matches.
   const groups = useMemo(() => {
     const folderOrder = new Map((folders ?? []).map((f, i) => [f.path, i]))
     const sorted = images
       .map((img, i) => ({ ...img, globalIndex: i }))
+      .filter((img) => !matches || matches.has(img.path))
       .sort((a, b) =>
         (folderOrder.get(a.folder) ?? 999) - (folderOrder.get(b.folder) ?? 999)
         || collator.compare(a.path, b.path)
@@ -242,7 +244,8 @@ export default memo(function ThumbnailBrowser({ images, currentIndex, onJumpTo, 
       map.get(img.folder).push(img)
     }
     return [...map.entries()]
-  }, [images, folders])
+  }, [images, folders, matches])
+  const shownCount = useMemo(() => groups.reduce((n, [, items]) => n + items.length, 0), [groups])
 
   const layout = useMemo(
     () => computeLayout(groups, view.width, thumbSize, images.length),
@@ -250,7 +253,7 @@ export default memo(function ThumbnailBrowser({ images, currentIndex, onJumpTo, 
   )
 
   // Track the scroll area's size (sidebar resize, scrollbar appearing) and position
-  const hasImages = images.length > 0
+  const hasImages = shownCount > 0
   useLayoutEffect(() => {
     const sc = scrollRef.current
     if (!sc) return
@@ -279,7 +282,7 @@ export default memo(function ThumbnailBrowser({ images, currentIndex, onJumpTo, 
   const measured = view.width > 0
   useEffect(() => {
     const sc = scrollRef.current
-    if (!sc || !measured || currentIndex >= images.length) return
+    if (!sc || !measured || currentIndex >= images.length || !(layout.topOf[currentIndex] >= 0)) return
     const y = layout.topOf[currentIndex] + PAD_TOP
     const viewTop = sc.scrollTop
     const viewBottom = viewTop + sc.clientHeight
@@ -291,7 +294,7 @@ export default memo(function ThumbnailBrowser({ images, currentIndex, onJumpTo, 
     sc.scrollTo({ top: Math.max(0, target), behavior: far ? 'auto' : 'smooth' })
     // Only when the current image changes; not when the layout shifts under the user
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex, measured])
+  }, [currentIndex, measured, matches])
 
   // Dismiss context menu on outside click or Escape
   useEffect(() => {
@@ -308,14 +311,15 @@ export default memo(function ThumbnailBrowser({ images, currentIndex, onJumpTo, 
     }
   }, [contextMenu])
 
-  // Clear selection when image list changes (delete / external change)
+  // Drop selected images that are gone (delete / external change) or hidden by a search,
+  // so bulk actions only touch what's shown
   useEffect(() => {
     setSelected(prev => {
-      const valid = new Set(images.map(img => img.path))
+      const valid = new Set(images.filter(img => !matches || matches.has(img.path)).map(img => img.path))
       const next = new Set([...prev].filter(p => valid.has(p)))
       return next.size === prev.size ? prev : next
     })
-  }, [images])
+  }, [images, matches])
 
   const toggleSelect = useCallback((path) => {
     setSelected(prev => {
@@ -412,6 +416,10 @@ export default memo(function ThumbnailBrowser({ images, currentIndex, onJumpTo, 
       {images.length === 0 ? (
         <div className="tb-empty">
           No images loaded.<br />Add and enable folders first.
+        </div>
+      ) : shownCount === 0 ? (
+        <div className="tb-empty">
+          {matches ? <>No images match<br />“{searchQuery}”.</> : 'Searching…'}
         </div>
       ) : (
         <div className="tb-scroll" ref={scrollRef}>
@@ -604,8 +612,17 @@ export default memo(function ThumbnailBrowser({ images, currentIndex, onJumpTo, 
                 </>)}
               </>)}
 
-              {!metaInfo.sd && (
-                <div className="tb-meta-no-sd">No generation parameters found.</div>
+              {metaInfo.fields?.length > 0 && (<>
+                <div className="tb-meta-section-title">Metadata</div>
+                <table className="tb-meta-table tb-meta-fields"><tbody>
+                  {metaInfo.fields.map(([k, v], i) => (
+                    <tr key={i}><td>{k}</td><td><div className="tb-meta-value">{v}</div></td></tr>
+                  ))}
+                </tbody></table>
+              </>)}
+
+              {!metaInfo.sd && !metaInfo.fields?.length && (
+                <div className="tb-meta-no-sd">No generation parameters or other metadata found.</div>
               )}
             </div>
           </div>

@@ -4,6 +4,17 @@ All notable changes to Folio are documented here.
 
 ---
 
+## [1.2.3] — 2026-11-20
+
+### Added
+- **Metadata search.** A search box above the Folders and Browse buttons finds pictures by their metadata: Stable Diffusion and ComfyUI prompts and settings, camera and lens, date taken, titles, keywords, descriptions, comments, file names and dimensions. Results show in the Browse grid as you type, and the viewer, arrow keys and slideshow stay within them. Every word must match; use "quotes" for a phrase and -word to leave pictures out. Ctrl+F jumps to the box, Escape clears it.
+- **More in the info panel.** It now also lists camera, date taken, lens, title, keywords, author, copyright, comments and software (from EXIF, XMP and PNG text), and shows the generation parameters of Automatic1111 JPEG and WebP files, not just PNGs.
+
+### Improved
+- The info panel opens faster for large PNGs: only the metadata is read, not the whole file.
+
+---
+
 ## [1.2.2] — 2026-11-17
 
 ### Changed
